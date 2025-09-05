@@ -66,7 +66,7 @@ echo "Evaluating trained model..."
 REPORT_FILE="$OUT/report.json"
 
 # Evaluate the trained model
-scperturb-cmap evaluate "$BEST_CHECKPOINT" > "$REPORT_FILE"
+scperturb-cmap evaluate --checkpoint "$BEST_CHECKPOINT" > "$REPORT_FILE"
 
 echo "Evaluation completed. Results:"
 python - <<PY
