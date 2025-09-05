@@ -22,6 +22,7 @@ LINCS="$PROJ/data/lincs/lincs_level5_landmark_long.parquet"
 # TargetSignature JSON expected by CLI
 TARGET_JSON="$PROJ/examples/out/target_sig_real.json"
 OUT="$PROJ/examples/out/results_real.parquet"
+FILTERED_TARGET_JSON="$PROJ/examples/out/target_sig_filtered.json"
 
 echo "[score] target_json=$TARGET_JSON lincs=$LINCS"
 
@@ -34,8 +35,31 @@ if [[ ! -f "$LINCS" ]]; then
   exit 1
 fi
 
+# Filter target to only genes present in the LINCS library (avoid low-overlap error)
+python - <<PY
+import json, pandas as pd, os
+lib_path = os.environ.get('LINCS')
+target_in = os.environ.get('TARGET_JSON')
+target_out = os.environ.get('FILTERED_TARGET_JSON')
+
+lib = pd.read_parquet(lib_path, engine='pyarrow')
+lib_genes = set(lib['gene_symbol'].astype(str).str.upper().unique())
+
+ts = json.load(open(target_in))
+genes = [str(g) for g in ts['genes']]
+weights = ts['weights']
+pairs = [(g, w) for g, w in zip(genes, weights) if g.upper() in lib_genes]
+if not pairs:
+    raise SystemExit('[err] No overlap between target and library genes')
+fg, fw = zip(*pairs)
+filtered = { 'genes': list(fg), 'weights': list(fw), 'metadata': ts.get('metadata', {}) }
+with open(target_out, 'w') as f:
+    json.dump(filtered, f)
+print(f"[ok] filtered target -> {target_out} (n={len(fg)})")
+PY
+
 scperturb-cmap score \
-  --target-json "$TARGET_JSON" \
+  --target-json "$FILTERED_TARGET_JSON" \
   --library     "$LINCS" \
   --method baseline \
   --top-k 200 \
