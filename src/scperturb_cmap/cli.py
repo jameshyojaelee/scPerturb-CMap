@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import typer
 
-from . import __version__
-from .utils.device import get_device
-
+from scperturb_cmap import __version__
+from scperturb_cmap.utils.device import get_device
 
 app = typer.Typer(help="scPerturb-CMap command line interface")
 
@@ -23,4 +22,3 @@ def device() -> None:
 
 def main() -> None:
     app()
-

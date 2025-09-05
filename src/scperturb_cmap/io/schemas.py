@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Literal, Optional, Sequence
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, field_serializer
-
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 REQUIRED_RANKING_COLUMNS = [
     "signature_id",
@@ -103,9 +109,9 @@ class DrugSignature(BaseModel):
 
 
 class ScoreResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
-    method: str
+    method: Literal["baseline", "metric"]
     ranking: pd.DataFrame
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -131,4 +137,3 @@ class ScoreResult(BaseModel):
     def _serialize_ranking(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
         # Serialize to list-of-dicts for stable round-trip
         return df.to_dict(orient="records")
-

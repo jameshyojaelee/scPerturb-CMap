@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-
 DeviceLiteral = Literal["cuda", "mps", "cpu"]
 
 
@@ -32,4 +31,3 @@ def get_device() -> DeviceLiteral:
         pass
 
     return "cpu"
-

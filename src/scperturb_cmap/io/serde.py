@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Union
-
 import pandas as pd
 
-PathLike = Union[str, Path]
 
-
-def load_parquet_table(path: PathLike) -> pd.DataFrame:
+def load_parquet_table(path: str) -> pd.DataFrame:
     """Load a Parquet table into a pandas DataFrame using pyarrow."""
     return pd.read_parquet(path, engine="pyarrow")
 
 
-def save_parquet_table(df: pd.DataFrame, path: PathLike) -> None:
+def save_parquet_table(df: pd.DataFrame, path: str) -> None:
     """Save a pandas DataFrame to Parquet using pyarrow without the index."""
-    pd.DataFrame(df).to_parquet(path, engine="pyarrow", index=False)
-
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("df must be a pandas.DataFrame")
+    df.to_parquet(path, engine="pyarrow", index=False)

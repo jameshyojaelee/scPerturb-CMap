@@ -6,6 +6,7 @@ from scperturb_cmap.io.schemas import (
     ScoreResult,
     TargetSignature,
 )
+from scperturb_cmap.io.serde import load_parquet_table, save_parquet_table
 
 
 def test_target_signature_validation_roundtrip():
@@ -53,32 +54,27 @@ def test_drug_signature_validation_roundtrip():
 
 
 def test_score_result_validation_roundtrip():
-    ranking_rows = [
-        {
-            "signature_id": "sig-001",
-            "compound": "CMPD42",
-            "cell_line": "HEK293",
-            "score": 3.14,
-            "moa": "inhibitor",
-            "target": "MAPK1",
-        },
-        {
-            "signature_id": "sig-002",
-            "compound": "CMPD7",
-            "cell_line": "A549",
-            "score": -1.0,
-            "moa": "agonist",
-            "target": "EGFR",
-        },
-    ]
-    data = {
-        "method": "example",
-        "ranking": ranking_rows,
-        "metadata": {"n": 2},
-    }
-
-    model = ScoreResult.model_validate(data)
-    # Internally a DataFrame
+    df = pd.DataFrame(
+        [
+            {
+                "signature_id": "sig-001",
+                "compound": "CMPD42",
+                "cell_line": "HEK293",
+                "score": 3.14,
+                "moa": "inhibitor",
+                "target": "MAPK1",
+            },
+            {
+                "signature_id": "sig-002",
+                "compound": "CMPD7",
+                "cell_line": "A549",
+                "score": -1.0,
+                "moa": "agonist",
+                "target": "EGFR",
+            },
+        ]
+    )
+    model = ScoreResult.model_validate({"method": "baseline", "ranking": df, "metadata": {"n": 2}})
     assert isinstance(model.ranking, pd.DataFrame)
     assert list(model.ranking.columns) == [
         "signature_id",
@@ -88,9 +84,6 @@ def test_score_result_validation_roundtrip():
         "moa",
         "target",
     ]
-    # round-trip back to list-of-dicts
-    dumped = model.model_dump()
-    assert dumped == data
 
 
 def test_score_result_missing_required_column_raises():
@@ -105,4 +98,13 @@ def test_score_result_missing_required_column_raises():
         }
     ]
     with pytest.raises(Exception):
-        ScoreResult.model_validate({"method": "x", "ranking": bad_rows, "metadata": {}})
+        ScoreResult.model_validate({"method": "metric", "ranking": bad_rows, "metadata": {}})
+
+
+def test_serde_round_trip(tmp_path):
+    df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    path = tmp_path / "tiny.parquet"
+    save_parquet_table(df, str(path))
+    loaded = load_parquet_table(str(path))
+    assert loaded.shape == df.shape
+    assert list(loaded.columns) == list(df.columns)

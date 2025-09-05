@@ -1,7 +1,6 @@
 import builtins
-import sys
-
 import importlib
+import sys
 
 from scperturb_cmap.utils.device import get_device
 
