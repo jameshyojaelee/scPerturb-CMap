@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import json
+import os
 import tempfile
 from typing import Optional, Tuple
 
@@ -9,6 +11,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from scperturb_cmap.analysis.enrichment import moa_enrichment
 from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.data.lincs_loader import load_lincs_long
 from scperturb_cmap.data.scrna_loader import load_h5ad
@@ -17,6 +20,9 @@ from scperturb_cmap.data.signatures import (
     target_from_gene_lists,
 )
 from scperturb_cmap.io.schemas import TargetSignature
+from scperturb_cmap.viz.plots import (
+    plot_moa_enrichment_bar,
+)
 
 st.set_page_config(page_title="scPerturb-CMap Demo", layout="wide")
 
@@ -71,6 +77,9 @@ def sidebar_controls(
     Optional[str],
 ]:
     st.sidebar.header("Data & Target")
+    # Allow specifying a LINCS long file path; default to examples/data/lincs_demo.parquet
+    default_path = st.session_state.get("demo_lincs_path", "examples/data/lincs_demo.parquet")
+    lincs_path = st.sidebar.text_input("LINCS long file (parquet/csv)", value=default_path)
     # Target source
     target_mode = st.sidebar.radio(
         "Target source",
@@ -148,6 +157,7 @@ def sidebar_controls(
         model_file,
         (None if method != "metric" else float(blend)),
         cln,
+        lincs_path,
     )
 
 
@@ -171,9 +181,53 @@ def main():
     st.title("scPerturb-CMap: Connectivity Demo")
     lincs_long = load_demo_library()
 
-    target_sig, lincs_long, method, top_k, model_file, blend, cln = sidebar_controls(
+    target_sig, lincs_long, method, top_k, model_file, blend, cln, lincs_path = sidebar_controls(
         lincs_long
     )
+
+    # Presets
+    st.sidebar.markdown("### Presets")
+    col_a, col_b = st.sidebar.columns(2)
+    emt_clicked = col_a.button("EMT reversal demo")
+    ifng_clicked = col_b.button("IFN-high demo")
+
+    def _load_demo_sets(path: str = "examples/data/demo_gene_sets.json"):
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                return json.load(f)
+        return {
+            "EMT_UP": ["VIM", "FN1", "ZEB1", "SNAI1", "ITGA5"],
+            "EMT_DN": ["EPCAM", "KRT8", "KRT18", "OCLN", "CLDN4"],
+            "IFNG_UP": ["STAT1", "IRF1", "CXCL10", "HLA-A", "ISG15"],
+            "IFNG_DN": [],
+        }
+
+    def _score_from_gene_lists(up, dn, library, method: str = "baseline", top_k: int = 50):
+        ts = target_from_gene_lists(up, dn)
+        res = rank_drugs(target_signature=ts, library=library, method=method, top_k=top_k)
+        # Ensure DataFrame
+        df_rank = (
+            res.ranking if isinstance(res.ranking, pd.DataFrame) else pd.DataFrame(res.ranking)
+        )
+        return ts, df_rank
+
+    if emt_clicked or ifng_clicked:
+        gs = _load_demo_sets()
+        library_obj = lincs_path if os.path.exists(str(lincs_path)) else lincs_long
+        if emt_clicked:
+            up, dn = gs.get("EMT_UP", []), gs.get("EMT_DN", [])
+        else:
+            up, dn = gs.get("IFNG_UP", []), gs.get("IFNG_DN", [])
+        with st.spinner("Scoring preset against drug library..."):
+            ts_preset, df_rank = _score_from_gene_lists(
+                up,
+                dn,
+                library_obj,
+                method="baseline",
+                top_k=100,
+            )
+            st.session_state.target_sig = {"genes": ts_preset.genes, "weights": ts_preset.weights}
+            st.session_state.results_df = df_rank
 
     # Optional filter by cell line
     # Apply filter if user selected in sidebar
@@ -220,28 +274,52 @@ def main():
                 ]
                 if c in ranking_df.columns
             ]
-            st.dataframe(ranking_df[show_cols])
+            st.dataframe(
+                ranking_df[show_cols],
+                use_container_width=True,
+                column_config={
+                    "score": st.column_config.NumberColumn(
+                        "score",
+                        help="Lower implies stronger predicted reversal",
+                    ),
+                    "moa": st.column_config.TextColumn(
+                        "moa", help="Mechanism of action"
+                    ),
+                    "target": st.column_config.TextColumn(
+                        "target",
+                        help="Primary target or target family",
+                    ),
+                },
+            )
             # Export buttons
             csv = ranking_df.to_csv(index=False).encode("utf-8")
-            st.download_button("Download CSV", data=csv, file_name="results.csv", mime="text/csv")
-            parquet_buf = io.BytesIO()
-            ranking_df.to_parquet(parquet_buf, engine="pyarrow", index=False)
-            st.download_button(
-                "Download Parquet",
-                data=parquet_buf.getvalue(),
-                file_name="results.parquet",
-                mime="application/octet-stream",
+            dl_col1, dl_col2 = st.columns(2)
+            dl_col1.download_button(
+                "Download CSV",
+                data=csv,
+                file_name="scperturb_cmap_results.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+            results_json = {
+                "results": ranking_df.to_dict(orient="records"),
+                "meta": {"library": lincs_path, "n": int(len(ranking_df))},
+            }
+            dl_col2.download_button(
+                "Download JSON",
+                data=json.dumps(results_json, indent=2).encode("utf-8"),
+                file_name="scperturb_cmap_results.json",
+                mime="application/json",
+                use_container_width=True,
             )
         except Exception as e:
             st.error(f"Scoring failed: {e}")
 
     # MOA enrichment
-    if "moa" in lib_df.columns and not ranking_df.empty:
-        st.subheader("MOA enrichment among top hits")
-        counts = ranking_df["moa"].value_counts().reset_index()
-        counts.columns = ["moa", "count"]
-        fig2 = px.bar(counts, x="moa", y="count")
-        st.plotly_chart(fig2, use_container_width=True)
+    if st.session_state.get("results_df") is not None:
+        df_cached = st.session_state["results_df"]
+        e_df = moa_enrichment(df_cached, top_n=50)
+        st.plotly_chart(plot_moa_enrichment_bar(e_df), use_container_width=True)
 
 
 if __name__ == "__main__":
