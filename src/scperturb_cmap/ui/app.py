@@ -193,6 +193,13 @@ def plot_signature(ts: TargetSignature, max_genes: int = 10):
 def main():
     st.title("scPerturb-CMap: Connectivity Demo")
     lincs_long = load_demo_library()
+    # Accept override via environment to point UI to prepared landmark library on HPC
+    if os.getenv("SCPC_LINCS") and os.path.exists(os.environ["SCPC_LINCS"]):
+        try:
+            lincs_long = load_lincs_long(os.environ["SCPC_LINCS"])
+            st.session_state["demo_lincs_path"] = os.environ["SCPC_LINCS"]
+        except Exception:
+            pass
 
     target_sig, lincs_long, method, top_k, model_file, blend, cln, lincs_path = sidebar_controls(
         lincs_long
@@ -226,7 +233,9 @@ def main():
 
     if emt_clicked or ifng_clicked:
         gs = _load_demo_sets()
-        library_obj = lincs_path if os.path.exists(str(lincs_path)) else lincs_long
+        library_obj = (
+            load_lincs_long(str(lincs_path)) if os.path.exists(str(lincs_path)) else lincs_long
+        )
         if emt_clicked:
             up, dn = gs.get("EMT_UP", []), gs.get("EMT_DN", [])
         else:
