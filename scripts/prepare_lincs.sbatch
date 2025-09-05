@@ -32,7 +32,8 @@ echo "Output directory: $LNX"
 
 # Process available files (demo data or downloaded files)
 files_found=0
-for f in "$RAW"/*Level5*.parquet "$RAW"/*Level5*.csv "$RAW"/*Level5*.tsv 2>/dev/null; do
+shopt -s nullglob  # Prevent errors when globs don't match
+for f in "$RAW"/*Level5*.parquet "$RAW"/*Level5*.csv "$RAW"/*Level5*.tsv; do
   [[ -f "$f" ]] || continue
   base=$(basename "$f")
   out="$LNX/${base%.*}_long_landmark.parquet"
