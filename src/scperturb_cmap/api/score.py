@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -16,6 +17,7 @@ from scperturb_cmap.models.baseline import (
 )
 from scperturb_cmap.models.dual_encoder import DualEncoder
 
+logger = logging.getLogger(__name__)
 LibraryType = Union[
     pd.DataFrame,  # long form with gene_symbol/score
     Tuple[np.ndarray, List[str], pd.DataFrame],  # (matrix, genes, meta)
@@ -133,13 +135,43 @@ def rank_drugs(
 ) -> ScoreResult:
     M, genes, meta, long_df = _as_pivot(library)
 
+    # Guardrail: minimum overlap if target is large
+    t_genes = harmonize_symbols(target_signature.genes)
+    lib_genes = harmonize_symbols(genes)
+    overlap = len(set(t_genes) & set(lib_genes))
+    if len(t_genes) >= 300 and overlap < 150:
+        missing = [g for g in t_genes if g not in set(lib_genes)][:10]
+        raise ValueError(
+            f"Insufficient gene overlap: {overlap} < 150. Example missing target genes: {missing}"
+        )
+
     # Baseline ensemble (lower is better)
     cos_df = cosine_connectivity(target_signature, M, genes, meta)
-    gsea_df = gsea_connectivity(target_signature, long_df)
-    base_df = ensemble_connectivity(cos_df, gsea_df)
+    try:
+        gsea_df = gsea_connectivity(target_signature, long_df)
+        base_df = ensemble_connectivity(cos_df, gsea_df)
+    except Exception as e:
+        logger.warning("GSEA connectivity failed (%s); falling back to cosine only.", e)
+        base_df = cos_df.copy()
+
+    def _attach_moa_target(df: pd.DataFrame) -> pd.DataFrame:
+        cols = ["signature_id"]
+        if "moa" in long_df.columns:
+            cols.append("moa")
+        if "target" in long_df.columns:
+            cols.append("target")
+        if len(cols) > 1:
+            extra = long_df[cols].drop_duplicates(subset=["signature_id"], keep="first")
+            out = df.merge(extra, on="signature_id", how="left")
+        else:
+            out = df.copy()
+            out["moa"] = pd.NA
+            out["target"] = pd.NA
+        return out
 
     if method == "baseline":
         ranking = base_df.sort_values("score", ascending=True).head(top_k)
+        ranking = _attach_moa_target(ranking)
         return ScoreResult(method="baseline", ranking=ranking, metadata={"top_k": top_k})
 
     if method == "metric":
@@ -153,6 +185,7 @@ def rank_drugs(
         df = base_df.copy()
         df["score"] = score
         ranking = df.sort_values("score", ascending=True).head(top_k)
+        ranking = _attach_moa_target(ranking)
         return ScoreResult(
             method="metric",
             ranking=ranking,

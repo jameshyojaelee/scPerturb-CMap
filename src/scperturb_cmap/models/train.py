@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import random
 from dataclasses import dataclass
@@ -15,6 +16,15 @@ from omegaconf import OmegaConf
 
 from scperturb_cmap.models.dual_encoder import DualEncoder
 from scperturb_cmap.utils.device import get_device
+from scperturb_cmap.utils.seed import set_global_seed
+
+try:
+    from tqdm.auto import tqdm
+except Exception:  # pragma: no cover
+    def tqdm(x, **kwargs):  # type: ignore
+        return x
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -40,10 +50,7 @@ class TrainConfig:
 
 
 def set_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    set_global_seed(seed)
 
 
 def make_synthetic(
@@ -189,7 +196,7 @@ def run(cfg: OmegaConf) -> None:
         steps = max(1, math.ceil(len(train_left) * len(pos_map[train_left[0]]) / cfg.batch_size))
         running_loss = 0.0
 
-        for _ in range(steps):
+        for _ in tqdm(range(steps), desc=f"epoch {epoch}"):
             optim.zero_grad()
             if cfg.loss_type.lower() == "ntxent":
                 batch = sample_pos_batch(train_left, pos_map, cfg.batch_size)
@@ -231,6 +238,7 @@ def run(cfg: OmegaConf) -> None:
 
         avg_loss = running_loss / steps
         val_recall = recall_at_k(model, vectors, val_left, pos_map, device, int(cfg.k))
+        logger.info("epoch=%s loss=%.4f val_recall@%s=%.3f", epoch, avg_loss, cfg.k, val_recall)
         metrics["epoch"].append(epoch)
         metrics["loss"].append(avg_loss)
         metrics["val_recall@k"].append(val_recall)
@@ -242,6 +250,7 @@ def run(cfg: OmegaConf) -> None:
                 "config": OmegaConf.to_container(OmegaConf.create(cfg), resolve=True),
             }
             torch.save(ckpt, artifacts_dir / "best.pt")
+            logger.info("Saved best checkpoint to %s", artifacts_dir / "best.pt")
 
     # Write metrics
     with open(artifacts_dir / "metrics.json", "w") as f:
