@@ -223,6 +223,16 @@ def main():
         }
 
     def _score_from_gene_lists(up, dn, library, method: str = "baseline", top_k: int = 50):
+        # Restrict to genes present in the library to avoid zero-overlap issues
+        try:
+            lib_df = library if isinstance(library, pd.DataFrame) else load_lincs_long(str(library))
+            lib_genes = set(lib_df["gene_symbol"].astype(str).str.upper())
+            up = [g for g in up if g.upper() in lib_genes]
+            dn = [g for g in dn if g.upper() in lib_genes]
+        except Exception:
+            pass
+        if not up and not dn:
+            raise ValueError("No overlap between provided gene lists and library genes.")
         ts = target_from_gene_lists(up, dn)
         res = rank_drugs(target_signature=ts, library=library, method=method, top_k=top_k)
         # Ensure DataFrame
@@ -270,6 +280,13 @@ def main():
 
     with col2:
         try:
+            # Default checkpoint for metric if none uploaded and available
+            if method == "metric" and not model_file:
+                default_ckpt = os.environ.get("SCPC_MODEL", "artifacts/best.pt")
+                if os.path.exists(default_ckpt):
+                    model_file = default_ckpt
+                else:
+                    st.warning("Metric method requires a checkpoint. Upload one or set SCPC_MODEL.")
             res = rank_drugs(
                 target_sig,
                 lib_df,
@@ -313,8 +330,12 @@ def main():
                     ),
                 },
             )
-            # Export buttons
-            csv = ranking_df.to_csv(index=False).encode("utf-8")
+            # Export buttons; replace NaNs for JSON safety
+            df_export = ranking_df.copy()
+            for c in df_export.columns:
+                if c not in df_export.select_dtypes(include=["number"]).columns:
+                    df_export[c] = df_export[c].astype(object).where(pd.notna(df_export[c]), "")
+            csv = df_export.to_csv(index=False).encode("utf-8")
             dl_col1, dl_col2 = st.columns(2)
             dl_col1.download_button(
                 "Download CSV",
@@ -324,8 +345,8 @@ def main():
                 use_container_width=True,
             )
             results_json = {
-                "results": ranking_df.to_dict(orient="records"),
-                "meta": {"library": lincs_path, "n": int(len(ranking_df))},
+                "results": df_export.to_dict(orient="records"),
+                "meta": {"library": str(lincs_path), "n": int(len(df_export))},
             }
             dl_col2.download_button(
                 "Download JSON",
