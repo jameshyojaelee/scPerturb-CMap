@@ -25,6 +25,7 @@ OUT="$PROJ/examples/out/results_real.parquet"
 FILTERED_TARGET_JSON="$PROJ/examples/out/target_sig_filtered.json"
 
 echo "[score] target_json=$TARGET_JSON lincs=$LINCS"
+export LINCS TARGET_JSON FILTERED_TARGET_JSON OUT
 
 if [[ ! -f "$TARGET_JSON" ]]; then
   echo "[err] Target JSON not found: $TARGET_JSON" >&2
@@ -37,10 +38,10 @@ fi
 
 # Filter target to only genes present in the LINCS library (avoid low-overlap error)
 python - <<PY
-import json, pandas as pd, os
-lib_path = os.environ.get('LINCS')
-target_in = os.environ.get('TARGET_JSON')
-target_out = os.environ.get('FILTERED_TARGET_JSON')
+import json, pandas as pd
+lib_path = "$LINCS"
+target_in = "$TARGET_JSON"
+target_out = "$FILTERED_TARGET_JSON"
 
 lib = pd.read_parquet(lib_path, engine='pyarrow')
 lib_genes = set(lib['gene_symbol'].astype(str).str.upper().unique())
