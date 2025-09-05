@@ -28,8 +28,8 @@ mkdir -p "$OUT"
 
 # Default parameters (can be overridden by command line args)
 H5AD="${1:-$PROJ/examples/data/demo.h5ad}"
-CLUSTER_KEY="${2:-leiden}"
-CLUSTER="${3:-2}"
+CLUSTER_KEY="${2:-cluster}"
+CLUSTER="${3:-C2}"
 REFERENCE="${4:-rest}"
 OUTFILE="$OUT/target_sig_real.parquet"
 
