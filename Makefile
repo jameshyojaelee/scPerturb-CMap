@@ -19,7 +19,8 @@ test:
 	$(PYTEST) -q
 
 ui:
-	@echo "UI placeholder: Streamlit app will run here"
+	python -m streamlit run $$(python -c 'import scperturb_cmap.ui.app,inspect; print(scperturb_cmap.ui.app.__file__)')
 
 demo:
 	$(PY) -c "from scperturb_cmap.utils.device import get_device; print('Device:', get_device())"
+ 

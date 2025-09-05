@@ -23,7 +23,7 @@ def test_cosine_connectivity_ordering():
     M = np.array(
         [
             [2.0, 2.0, -2.0],
-            [0.1, 0.1, -0.1],
+            [0.1, 0.0, -0.05],  # not proportional to pos
             [-2.0, -2.0, 2.0],
         ]
     )
@@ -46,14 +46,14 @@ def test_gsea_connectivity_ordering():
     rows = []
     for sig, scores in (
         ("pos", {"A": 2.0, "B": 2.0, "C": -1.0}),
-        ("neu", {"A": 0.1, "B": 0.1, "C": -0.1}),
+        ("neu", {"A": 0.1, "B": -0.05, "C": 0.0}),
         ("neg", {"A": -2.0, "B": -2.0, "C": 1.0}),
     ):
         for g, s in scores.items():
             rows.append(
                 {
                     "signature_id": sig,
-                    "compound": sig.upper(),
+                    "compound": "P" if sig == "pos" else "N",
                     "cell_line": "CL1",
                     "gene_symbol": g,
                     "score": s,
@@ -71,7 +71,7 @@ def test_ensemble_connectivity_combines_methods():
     M = np.array(
         [
             [2.0, 2.0, -2.0],
-            [0.1, 0.1, -0.1],
+            [0.1, 0.0, -0.05],
             [-2.0, -2.0, 2.0],
         ]
     )
@@ -87,14 +87,14 @@ def test_ensemble_connectivity_combines_methods():
     rows = []
     for sig, scores in (
         ("pos", {"A": 2.0, "B": 2.0, "C": -1.0}),
-        ("neu", {"A": 0.1, "B": 0.1, "C": -0.1}),
+        ("neu", {"A": 0.1, "B": -0.05, "C": 0.0}),
         ("neg", {"A": -2.0, "B": -2.0, "C": 1.0}),
     ):
         for g, s in scores.items():
             rows.append(
                 {
                     "signature_id": sig,
-                    "compound": sig.upper(),
+                    "compound": "P" if sig == "pos" else "N",
                     "cell_line": "CL1",
                     "gene_symbol": g,
                     "score": s,
@@ -107,4 +107,3 @@ def test_ensemble_connectivity_combines_methods():
     e = dict(zip(ens["signature_id"], ens["score"]))
     # Lower is better after flipping GSEA inside ensemble
     assert e["pos"] < e["neu"] < e["neg"]
-
