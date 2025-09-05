@@ -21,7 +21,7 @@ OUT_DIR = Path("examples/out")
 def ensure_demo() -> pd.DataFrame:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     # Ensure demo LINCS exists; generate via print_demo_stats (which also writes parquet)
-    from scripts.print_demo_stats import ensure_lincs_demo
+    from print_demo_stats import ensure_lincs_demo
 
     lincs_path = ensure_lincs_demo()
     return load_lincs_long(str(lincs_path))
@@ -123,7 +123,7 @@ def check_metric_improves() -> dict:
 
     subprocess.run(
         [
-            "python",
+            ".venv/bin/python",
             "-m",
             "scperturb_cmap.models.train",
             "epochs=3",

@@ -5,7 +5,7 @@ PY := $(VENV)/bin/python
 PYTEST := $(VENV)/bin/pytest
 RUFF := $(VENV)/bin/ruff
 
-.PHONY: setup lint test ui demo train evaluate acceptance
+.PHONY: setup lint test ui demo train evaluate acceptance hpc-setup hpc-ui
 
 setup:
 	@test -d $(VENV) || $(PYTHON) -m venv $(VENV)
@@ -41,3 +41,11 @@ evaluate:
 
 acceptance:
 	$(PY) scripts/check_acceptance.py
+
+hpc-setup:
+	chmod +x scripts/setup_hpc.sh
+	./scripts/setup_hpc.sh
+
+hpc-ui:
+	chmod +x scripts/ui_hpc.sh
+	./scripts/ui_hpc.sh

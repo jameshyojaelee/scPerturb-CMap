@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import sys
 import tempfile
 from typing import Optional, Tuple
 
@@ -25,6 +26,18 @@ from scperturb_cmap.viz.plots import (
 )
 
 st.set_page_config(page_title="scPerturb-CMap Demo", layout="wide")
+
+# Allow passing a default LINCS path via CLI arg `--lincs <path>` or env `SCPC_LINCS`.
+try:
+    if "--lincs" in sys.argv:
+        idx = sys.argv.index("--lincs")
+        if idx + 1 < len(sys.argv):
+            st.session_state["demo_lincs_path"] = sys.argv[idx + 1]
+    elif os.getenv("SCPC_LINCS"):
+        st.session_state["demo_lincs_path"] = os.environ["SCPC_LINCS"]
+except Exception:
+    # Non-fatal: fall back to default demo path
+    pass
 
 
 @st.cache_data(show_spinner=False)

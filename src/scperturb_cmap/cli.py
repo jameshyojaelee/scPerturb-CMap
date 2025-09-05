@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import platform
 import subprocess
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+import torch
 import typer
 
 from scperturb_cmap import __version__
@@ -17,7 +19,7 @@ from scperturb_cmap.data.signatures import target_from_cluster, target_from_gene
 from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.utils.device import get_device
 
-app = typer.Typer(help="scPerturb-CMap command line interface")
+app = typer.Typer(name="scperturb-cmap", help="scPerturb-CMap command line interface")
 
 
 @app.command()
@@ -30,6 +32,19 @@ def version() -> None:
 def device() -> None:
     """Print the selected compute device (cuda|mps|cpu)."""
     typer.echo(get_device())
+
+
+@app.command()
+def diagnose() -> None:
+    """Print environment diagnostics as JSON."""
+    info = {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "device": get_device(),
+        "torch": getattr(torch, "__version__", "NA"),
+        "pandas": getattr(pd, "__version__", "NA"),
+    }
+    print(json.dumps(info, indent=2))
 
 
 @app.command("prepare-lincs")

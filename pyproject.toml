@@ -40,7 +40,7 @@ dev = [
 ]
 
 [project.scripts]
-scperturb-cmap = "scperturb_cmap.cli:main"
+scperturb-cmap = "scperturb_cmap.cli:app"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

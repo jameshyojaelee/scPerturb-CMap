@@ -30,6 +30,11 @@ def _demo_landmarks() -> List[str]:
         "TUBB",
         "RPLP0",
         "EEF1A1",
+        # Include some synthetic genes for demo testing
+        "G1",
+        "G2",
+        "G10",
+        "G100",
     ])
 
 
@@ -44,29 +49,29 @@ def main(argv: list[str] | None = None) -> None:
         description="Prepare a curated LINCS subset in long format and write Parquet.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--input", required=True, help="Path to LINCS long file (csv/tsv/parquet)")
+    parser.add_argument("--raw", "--input", required=True, help="Path to LINCS long file (csv/tsv/parquet)")
     parser.add_argument(
-        "--output",
+        "--out", "--output",
         default="examples/data/lincs_demo.parquet",
         help="Output Parquet path",
     )
     parser.add_argument(
         "--genes-file",
-        help="Optional text file with one gene symbol per line; overrides --landmarks",
+        help="Optional text file with one gene symbol per line; overrides --landmark-only",
     )
     parser.add_argument(
-        "--landmarks",
+        "--landmark-only", "--landmarks",
         action="store_true",
         help="Filter to a minimal built-in set of landmark-like genes (demo)",
     )
     args = parser.parse_args(argv)
 
-    df = load_lincs_long(args.input)
+    df = load_lincs_long(args.raw)
 
     gene_list: List[str]
     if args.genes_file:
         gene_list = _read_gene_list(Path(args.genes_file))
-    elif args.landmarks:
+    elif args.landmark_only:
         gene_list = _demo_landmarks()
     else:
         gene_list = []
@@ -74,7 +79,7 @@ def main(argv: list[str] | None = None) -> None:
     if gene_list:
         df = filter_by_genes(df, gene_list)
 
-    out_path = Path(args.output)
+    out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(out_path, engine="pyarrow", index=False)
 

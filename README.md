@@ -51,6 +51,9 @@ make lint
 make test
 ```
 
+## HPC Setup
+- For cluster-specific setup, directories, and Slurm examples, see `docs/hpc.md`.
+
 ## Devices: Mac vs HPC
 - `--device auto` selects in order: `cuda` if available, else `mps` on Apple Silicon, else `cpu`.
 - On MacBooks with Apple Silicon, PyTorch MPS is used automatically when available.
