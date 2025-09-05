@@ -21,8 +21,9 @@ else
   echo "Conda not found, using system Python"
 fi
 
-RAW="/gpfs/commons/home/jameslee/scPerturb-CMap/data/raw"
-LNX="/gpfs/commons/home/jameslee/scPerturb-CMap/data/lincs"
+PROJ="/gpfs/commons/home/jameslee/scPerturb-CMap"
+RAW="$PROJ/data/raw"
+LNX="$PROJ/data/lincs"
 mkdir -p "$LNX"
 
 echo "Processing raw Level 5 files..."
