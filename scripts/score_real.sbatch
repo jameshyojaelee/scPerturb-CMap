@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J score_real
-#SBATCH -p short
+#SBATCH -p cpu
 #SBATCH -c 8
 #SBATCH --mem=32G
 #SBATCH -t 02:00:00
