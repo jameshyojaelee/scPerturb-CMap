@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J make_target
-#SBATCH -p short
+#SBATCH -p cpu
 #SBATCH -c 4
 #SBATCH --mem=16G
 #SBATCH -t 01:00:00
@@ -21,12 +21,13 @@ else
   echo "Conda not found, using system Python"
 fi
 
-DATA="/gpfs/commons/home/jameslee/scPerturb-CMap/data"
-OUT="/gpfs/commons/home/jameslee/scPerturb-CMap/examples/out"
+PROJ="/gpfs/commons/home/jameslee/scPerturb-CMap"
+DATA="$PROJ/data"
+OUT="$PROJ/examples/out"
 mkdir -p "$OUT"
 
 # Default parameters (can be overridden by command line args)
-H5AD="${1:-$DATA/sc/your_study.h5ad}"
+H5AD="${1:-$PROJ/examples/data/demo.h5ad}"
 CLUSTER_KEY="${2:-leiden}"
 CLUSTER="${3:-2}"
 REFERENCE="${4:-rest}"
