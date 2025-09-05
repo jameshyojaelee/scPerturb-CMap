@@ -113,11 +113,23 @@ def _metric_scores(
     model.eval()
 
     with torch.no_grad():
-        left = torch.tensor(aligned, dtype=torch.float32).unsqueeze(0)
+        # Adapt feature dimension if model input dimension differs from library genes
+        if aligned.shape[0] < input_dim:
+            pad = np.zeros(input_dim - aligned.shape[0], dtype=aligned.dtype)
+            left_vec = np.concatenate([aligned, pad], axis=0)
+        else:
+            left_vec = aligned[:input_dim]
+
+        left = torch.tensor(left_vec, dtype=torch.float32).unsqueeze(0)
         zL, _, _ = model(left, left)
         zL = zL / (zL.norm(p=2, dim=-1, keepdim=True) + 1e-12)
         # Right embeddings for all rows
-        R = torch.tensor(M, dtype=torch.float32)
+        if M.shape[1] < input_dim:
+            padR = np.zeros((M.shape[0], input_dim - M.shape[1]), dtype=M.dtype)
+            R_np = np.concatenate([M, padR], axis=1)
+        else:
+            R_np = M[:, :input_dim]
+        R = torch.tensor(R_np, dtype=torch.float32)
         _, zR, _ = model(R, R)
         zR = zR / (zR.norm(p=2, dim=-1, keepdim=True) + 1e-12)
         sim = (zR @ zL.squeeze(0))  # shape [num_signatures]
