@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J prep_lincs
-#SBATCH -p short
+#SBATCH -p cpu
 #SBATCH -c 8
 #SBATCH --mem=32G
 #SBATCH -t 02:00:00
@@ -29,7 +29,8 @@ echo "Processing raw Level 5 files..."
 echo "Input directory: $RAW"
 echo "Output directory: $LNX"
 
-# Process each Level 5 file
+# Process available files (demo data or downloaded files)
+files_found=0
 for f in "$RAW"/*Level5*.parquet "$RAW"/*Level5*.csv "$RAW"/*Level5*.tsv 2>/dev/null; do
   [[ -f "$f" ]] || continue
   base=$(basename "$f")
@@ -39,7 +40,26 @@ for f in "$RAW"/*Level5*.parquet "$RAW"/*Level5*.csv "$RAW"/*Level5*.tsv 2>/dev/
     --raw "$f" \
     --out "$out" \
     --landmark-only
+  ((files_found++))
 done
+
+# If no downloaded files, use demo data
+if [[ $files_found -eq 0 ]]; then
+  echo "[info] No downloaded files found, using demo data"
+  demo_file="$PROJ/examples/data/lincs_demo.parquet"
+  if [[ -f "$demo_file" ]]; then
+    out="$LNX/lincs_demo_long_landmark.parquet"
+    echo "[prep] $demo_file -> $out"
+    python scripts/prepare_lincs_subset.py \
+      --raw "$demo_file" \
+      --out "$out" \
+      --landmark-only
+    ((files_found++))
+  else
+    echo "[err] No downloaded or demo files found"
+    exit 1
+  fi
+fi
 
 echo "Merging processed files..."
 python - <<'PY'
