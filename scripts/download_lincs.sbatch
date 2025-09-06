@@ -25,7 +25,13 @@ RAW="/gpfs/commons/home/jameslee/scPerturb-CMap/data/raw"
 cd "$RAW"
 echo "Changed to directory: $(pwd)"
 
-# Ensure manifest has at least one URL
+# Ensure manifest has at least one URL. Edit data/raw/lincs_level5_urls.txt and add
+# links for GCTX and metadata files such as:
+#   - GSE92742_Broad_LINCS_Level5_COMPZ.MODZ.gctx
+#   - GSE70138_Broad_LINCS_Level5_COMPZ.MODZ.gctx
+#   - sig_info.txt.gz, inst_info.txt.gz, gene_info.txt.gz
+#   - repurposing_drugs_*.tsv (Repurposing Hub annotations)
+# You can place the files under $RAW/ manually as well.
 if ! grep -E '^[[:space:]]*https?://' -q lincs_level5_urls.txt; then
   echo "[err] No URLs found in lincs_level5_urls.txt. Please add real download URLs."
   exit 1

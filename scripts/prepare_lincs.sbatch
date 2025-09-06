@@ -30,32 +30,52 @@ echo "Processing raw Level 5 files..."
 echo "Input directory: $RAW"
 echo "Output directory: $LNX"
 
-# Process available files (demo data or downloaded files)
 files_found=0
-shopt -s nullglob  # Prevent errors when globs don't match
-for f in "$RAW"/*Level5*.parquet "$RAW"/*Level5*.csv "$RAW"/*Level5*.tsv; do
-  [[ -f "$f" ]] || continue
-  base=$(basename "$f")
-  out="$LNX/${base%.*}_long_landmark.parquet"
-  echo "[prep] $f -> $out"
-  python scripts/prepare_lincs_subset.py \
-    --raw "$f" \
-    --out "$out" \
-    --landmark-only
+shopt -s nullglob
+
+# Prefer GCTX inputs
+for g in "$RAW"/*.gctx; do
+  [[ -f "$g" ]] || continue
+  base=$(basename "$g")
+  out="$LNX/lincs_level5_landmark_long"  # partitioned dataset directory
+  echo "[prep] GCTX $g -> $out (partitioned by cell_line)"
+  # Optional metadata files if present
+  GENE_INFO=""; REPURPOSING=""
+  for c in "$RAW"/gene_info*.txt*; do [[ -f "$c" ]] && GENE_INFO="$c" && break; done
+  for r in "$RAW"/repurposing*.*; do [[ -f "$r" ]] && REPURPOSING="$r" && break; done
+  scperturb-cmap prepare-lincs \
+    --gctx "$g" \
+    ${GENE_INFO:+--gene-info "$GENE_INFO"} \
+    ${REPURPOSING:+--repurposing "$REPURPOSING"} \
+    --landmarks \
+    --partition-by cell_line \
+    --output "$out"
   ((files_found++))
 done
 
-# If no downloaded files, use demo data
+# Fall back to any long-form CSV/Parquet/TSV in RAW
+if [[ $files_found -eq 0 ]]; then
+  for f in "$RAW"/*Level5*.parquet "$RAW"/*Level5*.csv "$RAW"/*Level5*.tsv; do
+    [[ -f "$f" ]] || continue
+    base=$(basename "$f")
+    out="$LNX/${base%.*}_long_landmark.parquet"
+    echo "[prep] long $f -> $out"
+    scperturb-cmap prepare-lincs \
+      --input "$f" \
+      --landmarks \
+      --output "$out"
+    ((files_found++))
+  done
+fi
+
+# If still nothing, use demo data
 if [[ $files_found -eq 0 ]]; then
   echo "[info] No downloaded files found, using demo data"
   demo_file="$PROJ/examples/data/lincs_demo.parquet"
   if [[ -f "$demo_file" ]]; then
     out="$LNX/lincs_demo_long_landmark.parquet"
-    echo "[prep] $demo_file -> $out"
-    python scripts/prepare_lincs_subset.py \
-      --raw "$demo_file" \
-      --out "$out" \
-      --landmark-only
+    echo "[prep] demo $demo_file -> $out"
+    scperturb-cmap prepare-lincs --input "$demo_file" --landmarks --output "$out"
     ((files_found++))
   else
     echo "[err] No downloaded or demo files found"
@@ -63,21 +83,4 @@ if [[ $files_found -eq 0 ]]; then
   fi
 fi
 
-echo "Merging processed files..."
-python - <<'PY'
-import glob, pandas as pd, os
-root="/gpfs/commons/home/jameslee/scPerturb-CMap/data/lincs"
-paths=glob.glob(os.path.join(root, '*_long_landmark.parquet'))
-if paths:
-    df=pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
-    out=os.path.join(root, 'lincs_level5_landmark_long.parquet')
-    df.to_parquet(out, engine='pyarrow')
-    print('[ok] merged ->', out, 'rows=', len(df))
-    print(f'  signatures: {df["signature_id"].nunique():,}')
-    print(f'  genes: {df["gene_symbol"].nunique():,}')
-    print(f'  compounds: {df["compound"].nunique():,}')
-else:
-    print('[warn] no landmark parquet files found to merge')
-PY
-
-echo "[complete] LINCS preparation finished"
+echo "[complete] LINCS preparation finished (dataset: $LNX/lincs_level5_landmark_long)"

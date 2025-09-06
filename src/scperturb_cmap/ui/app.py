@@ -88,6 +88,7 @@ def sidebar_controls(
     Optional[str],
     Optional[float],
     Optional[str],
+    str,
 ]:
     st.sidebar.header("Data & Target")
     # Allow specifying a LINCS long file path; default to examples/data/lincs_demo.parquet

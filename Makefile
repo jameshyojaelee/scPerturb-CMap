@@ -5,7 +5,7 @@ PY := $(VENV)/bin/python
 PYTEST := $(VENV)/bin/pytest
 RUFF := $(VENV)/bin/ruff
 
-.PHONY: setup lint test ui demo train evaluate acceptance hpc-setup hpc-ui
+.PHONY: setup lint test ui demo train evaluate acceptance hpc-setup hpc-ui validate-dataset
 
 setup:
 	@test -d $(VENV) || $(PYTHON) -m venv $(VENV)
@@ -49,3 +49,7 @@ hpc-setup:
 hpc-ui:
 	chmod +x scripts/ui_hpc.sh
 	./scripts/ui_hpc.sh
+
+validate-dataset:
+	@DATASET?=data/lincs/lincs_level5_landmark_long
+	$(PY) scripts/validate_parquet_dataset.py --dataset $${DATASET} --partition cell_line --full --head 5

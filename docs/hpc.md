@@ -85,9 +85,30 @@ Data Ingestion
 - Place your `.h5ad` single-cell inputs under `${SCPC_BASE}/data/sc/`.
 - Update your paths or pass them as CLI args via `--library` and your target JSON.
 
+### Converting GCTX Level 5 to long Parquet
+
+If you download Level 5 GCTX files, use the CLI to convert them to a long table with annotations. The script `scripts/prepare_lincs.sbatch` will automatically detect `.gctx` inputs and run:
+
+```bash
+# Optional: extract landmark genes from gene_info
+scperturb-cmap landmarks --gene-info $RAW/gene_info.txt --output $SCPC_BASE/data/l1000_landmarks.txt
+
+# Convert GCTX and write a partitioned dataset by cell_line (recommended for scale)
+scperturb-cmap prepare-lincs \
+  --gctx $RAW/GSE92742_Broad_LINCS_Level5_COMPZ.MODZ.gctx \
+  --gene-info $RAW/gene_info.txt \
+  --repurposing $RAW/repurposing_drugs.tsv \
+  --landmarks \
+  --partition-by cell_line \
+  --output $SCPC_BASE/data/lincs/lincs_level5_landmark_long
+```
+
+The job writes into a single dataset directory:
+`$SCPC_BASE/data/lincs/lincs_level5_landmark_long/`.
+Use CLI `score --cell-line <ID>` to leverage predicate pushdown when reading.
+
 Troubleshooting
 ---------------
 - CPU-only nodes: the package runs on CPU; device detection falls back to CPU automatically.
 - CUDA errors: ensure the PyTorch build matches your CUDA driver/toolkit on the cluster.
 - Permissions: prefer user home or project scratch for `SCPC_BASE`.
-
