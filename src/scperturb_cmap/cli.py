@@ -200,6 +200,13 @@ def score(
     time_range: Optional[str] = typer.Option(None, help="Time range as 'min,max' on pert_time if available", rich_help_panel="Filtering"),
     touchstone: bool = typer.Option(False, help="Restrict to Touchstone signatures if 'is_gold' flag available"),
 ) -> None:
+    def _summarize(df: pd.DataFrame) -> dict:
+        out = {"rows": int(len(df))}
+        for col, key in [("signature_id", "signatures"), ("compound", "compounds"), ("cell_line", "cell_lines")]:
+            if col in df.columns:
+                out[key] = int(df[col].nunique())
+        return out
+
     ts = TargetSignature.model_validate_json(Path(target_json).read_text())
     # If a cell_line(s) filter is provided, attempt predicate pushdown via pyarrow.dataset
     selected_cells: List[str] = []
@@ -246,53 +253,127 @@ def score(
             dataset = ds.dataset(library, format="parquet")
             names = set(dataset.schema.names)
             exprs = []
+            warnings: list[str] = []
             if selected_cells and "cell_line" in names:
                 exprs.append(ds.field("cell_line").isin(sorted(set(selected_cells))))
+            elif selected_cells:
+                warnings.append("Requested cell_line filter but column 'cell_line' not found; ignoring.")
             if selected_moas and "moa" in names:
                 exprs.append(ds.field("moa").isin(sorted(set(selected_moas))))
+            elif selected_moas:
+                warnings.append("Requested MOA filter but column 'moa' not found; ignoring.")
             if selected_ptypes and "pert_type" in names:
                 exprs.append(ds.field("pert_type").isin(sorted(set(selected_ptypes))))
+            elif selected_ptypes:
+                warnings.append("Requested pert_type filter but column 'pert_type' not found; ignoring.")
             if selected_compounds and "compound" in names:
                 exprs.append(ds.field("compound").isin(sorted(set(selected_compounds))))
+            elif selected_compounds:
+                warnings.append("Requested compound filter but column 'compound' not found; ignoring.")
             if dose_rng and "pert_dose" in names:
                 lo, hi = dose_rng
                 exprs.append((ds.field("pert_dose") >= lo) & (ds.field("pert_dose") <= hi))
+            elif dose_rng:
+                warnings.append("Requested pert_dose range but column 'pert_dose' not found; ignoring.")
             if time_rng and "pert_time" in names:
                 lo, hi = time_rng
                 exprs.append((ds.field("pert_time") >= lo) & (ds.field("pert_time") <= hi))
+            elif time_rng:
+                warnings.append("Requested pert_time range but column 'pert_time' not found; ignoring.")
             if touchstone and "is_gold" in names:
                 # Accept common truthy forms
                 exprs.append((ds.field("is_gold") == True) | (ds.field("is_gold") == 1) | (ds.field("is_gold") == "1") | (ds.field("is_gold") == "true") | (ds.field("is_gold") == "True"))
+            elif touchstone:
+                warnings.append("Requested --touchstone but column 'is_gold' not found; ignoring.")
             if not exprs:
                 # No applicable columns; fall back
                 raise RuntimeError("No applicable filter columns present in dataset")
+            try:
+                pre_rows = int(dataset.count_rows())
+            except Exception:
+                pre_rows = -1
             filt = exprs[0]
             for e in exprs[1:]:
                 filt = filt & e
             df_long = dataset.scanner(filter=filt).to_table().to_pandas()
+            if warnings:
+                for w in warnings:
+                    typer.echo(f"[warn] {w}", err=True)
+            # Print summary of filters and counts
+            summary_filters = {
+                "cell_line": sorted(set(selected_cells)) if selected_cells else None,
+                "moa": sorted(set(selected_moas)) if selected_moas else None,
+                "pert_type": sorted(set(selected_ptypes)) if selected_ptypes else None,
+                "compound": sorted(set(selected_compounds)) if selected_compounds else None,
+                "dose_range": dose_rng,
+                "time_range": time_rng,
+                "touchstone": bool(touchstone),
+            }
+            typer.echo(
+                f"[info] filter summary: " + \
+                ", ".join([f"{k}={v}" for k, v in summary_filters.items() if v]),
+                err=True,
+            )
+            post_stats = _summarize(df_long)
+            if pre_rows >= 0:
+                typer.echo(f"[info] rows pre-filter={pre_rows:,} post-filter={post_stats['rows']:,}", err=True)
+            else:
+                typer.echo(f"[info] rows post-filter={post_stats['rows']:,}", err=True)
         except Exception:
             # Fallback: load entire table then filter
-            df_long = load_lincs_long(library)
+            df_full = load_lincs_long(library)
+            pre_rows = len(df_full)
+            df_long = df_full
             if selected_cells and "cell_line" in df_long.columns:
                 df_long = df_long[df_long["cell_line"].astype(str).isin(set(selected_cells))]
+            elif selected_cells:
+                typer.echo("[warn] Requested cell_line filter but column 'cell_line' not found; ignoring.", err=True)
             if selected_moas and "moa" in df_long.columns:
                 df_long = df_long[df_long["moa"].astype(str).isin(set(selected_moas))]
+            elif selected_moas:
+                typer.echo("[warn] Requested MOA filter but column 'moa' not found; ignoring.", err=True)
             if selected_ptypes and "pert_type" in df_long.columns:
                 df_long = df_long[df_long["pert_type"].astype(str).isin(set(selected_ptypes))]
+            elif selected_ptypes:
+                typer.echo("[warn] Requested pert_type filter but column 'pert_type' not found; ignoring.", err=True)
             if selected_compounds and "compound" in df_long.columns:
                 df_long = df_long[df_long["compound"].astype(str).isin(set(selected_compounds))]
+            elif selected_compounds:
+                typer.echo("[warn] Requested compound filter but column 'compound' not found; ignoring.", err=True)
             if dose_rng and "pert_dose" in df_long.columns:
                 lo, hi = dose_rng
                 vals = pd.to_numeric(df_long["pert_dose"], errors="coerce")
                 df_long = df_long[(vals >= lo) & (vals <= hi)]
+            elif dose_rng:
+                typer.echo("[warn] Requested pert_dose range but column 'pert_dose' not found; ignoring.", err=True)
             if time_rng and "pert_time" in df_long.columns:
                 lo, hi = time_rng
                 vals = pd.to_numeric(df_long["pert_time"], errors="coerce")
                 df_long = df_long[(vals >= lo) & (vals <= hi)]
+            elif time_rng:
+                typer.echo("[warn] Requested pert_time range but column 'pert_time' not found; ignoring.", err=True)
             if touchstone and "is_gold" in df_long.columns:
                 s = df_long["is_gold"].astype(str).str.lower()
                 df_long = df_long[s.isin({"1", "true", "yes"}) | (s == "1.0")]
+            elif touchstone:
+                typer.echo("[warn] Requested --touchstone but column 'is_gold' not found; ignoring.", err=True)
             df_long = df_long.reset_index(drop=True)
+            summary_filters = {
+                "cell_line": sorted(set(selected_cells)) if selected_cells else None,
+                "moa": sorted(set(selected_moas)) if selected_moas else None,
+                "pert_type": sorted(set(selected_ptypes)) if selected_ptypes else None,
+                "compound": sorted(set(selected_compounds)) if selected_compounds else None,
+                "dose_range": dose_rng,
+                "time_range": time_rng,
+                "touchstone": bool(touchstone),
+            }
+            typer.echo(
+                f"[info] filter summary: " + \
+                ", ".join([f"{k}={v}" for k, v in summary_filters.items() if v]),
+                err=True,
+            )
+            post_stats = _summarize(df_long)
+            typer.echo(f"[info] rows pre-filter={pre_rows:,} post-filter={post_stats['rows']:,}", err=True)
     else:
         df_long = load_lincs_long(library)
     res = rank_drugs(ts, df_long, method=method, model_path=model_path, top_k=top_k, blend=blend)
