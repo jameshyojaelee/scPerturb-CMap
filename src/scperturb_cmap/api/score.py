@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 import torch
+from scipy.stats import norm
 
 from scperturb_cmap.data.lincs_loader import pivot_signatures
 from scperturb_cmap.data.preprocess import harmonize_symbols, standardize_vector
@@ -97,7 +98,13 @@ def _metric_scores(
     # Create aligned target vector
     ref_vec = np.asarray(t_vals)
     # Build mapping for first occurrences
-    idx_map = {g: i for i, g in enumerate(t_genes) if g not in locals().get("_seen", set())}
+    seen: set[str] = set()
+    idx_map: dict[str, int] = {}
+    for i, g in enumerate(t_genes):
+        if g in seen:
+            continue
+        seen.add(g)
+        idx_map[g] = i
     # Aligned order same as library genes
     aligned = np.zeros(len(g_ref), dtype=float)
     for j, g in enumerate(g_ref):
@@ -184,6 +191,11 @@ def rank_drugs(
     if method == "baseline":
         ranking = base_df.sort_values("score", ascending=True).head(top_k)
         ranking = _attach_moa_target(ranking)
+        if not ranking.empty:
+            ranking = ranking.copy()
+            z_scores = _zscore(ranking["score"].to_numpy())
+            ranking["z_score"] = z_scores
+            ranking["p_value"] = 2 * norm.sf(np.abs(z_scores))
         return ScoreResult(method="baseline", ranking=ranking, metadata={"top_k": top_k})
 
     if method == "metric":
@@ -198,6 +210,11 @@ def rank_drugs(
         df["score"] = score
         ranking = df.sort_values("score", ascending=True).head(top_k)
         ranking = _attach_moa_target(ranking)
+        if not ranking.empty:
+            ranking = ranking.copy()
+            z_scores = _zscore(ranking["score"].to_numpy())
+            ranking["z_score"] = z_scores
+            ranking["p_value"] = 2 * norm.sf(np.abs(z_scores))
         return ScoreResult(
             method="metric",
             ranking=ranking,

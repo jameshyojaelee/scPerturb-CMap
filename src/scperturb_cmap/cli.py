@@ -4,22 +4,26 @@ import json
 import platform
 import subprocess
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 import pandas as pd
 import torch
 import typer
 
 from scperturb_cmap import __version__
+from scperturb_cmap.analysis.aggregate import collapse_replicates_modz
 from scperturb_cmap.api.score import rank_drugs
-from scperturb_cmap.data.lincs_loader import load_lincs_long
 from scperturb_cmap.data.lincs_gctx import gctx_to_long
-from scperturb_cmap.data.resources import load_l1000_landmarks, derive_landmarks_from_gene_info
+from scperturb_cmap.data.lincs_loader import load_lincs_long
 from scperturb_cmap.data.preprocess import harmonize_symbols
+from scperturb_cmap.data.resources import derive_landmarks_from_gene_info, load_l1000_landmarks
 from scperturb_cmap.data.scrna_loader import load_h5ad
-from scperturb_cmap.data.signatures import target_from_cluster, target_from_gene_lists
+from scperturb_cmap.data.signatures import (
+    summarize_target_signature,
+    target_from_cluster,
+    target_from_gene_lists,
+)
 from scperturb_cmap.io.schemas import TargetSignature
-from scperturb_cmap.io.serde import load_parquet_dataset_filtered
 from scperturb_cmap.utils.device import get_device
 
 app = typer.Typer(name="scperturb-cmap", help="scPerturb-CMap command line interface")
@@ -52,23 +56,58 @@ def diagnose() -> None:
 
 @app.command("prepare-lincs")
 def prepare_lincs(
-    input: Optional[str] = typer.Option(None, help="Input LINCS long file (csv/tsv/parquet)"),
+    input: Optional[str] = typer.Option(
+        None,
+        help="Input LINCS long file (csv/tsv/parquet)",
+    ),
     output: str = typer.Option(
-        "examples/data/lincs_demo.parquet", help="Output Parquet path"
+        "examples/data/lincs_demo.parquet",
+        help="Output Parquet path",
     ),
-    genes_file: Optional[str] = typer.Option(None, help="Optional text file of gene symbols to keep"),
+    genes_file: Optional[str] = typer.Option(
+        None,
+        help="Optional text file of gene symbols to keep",
+    ),
     landmarks: bool = typer.Option(
-        False, help="Filter to the L1000 landmark genes"
+        False,
+        help="Filter to the L1000 landmark genes",
     ),
-    landmarks_file: Optional[str] = typer.Option(None, help="Optional override path to L1000 landmark list"),
-    gctx: Optional[str] = typer.Option(None, help="Optional Level 5 GCTX to convert to long format"),
-    gene_info: Optional[str] = typer.Option(None, help="Optional gene_info table for mapping IDs to symbols"),
-    sig_info: Optional[str] = typer.Option(None, help="Optional sig_info table for metadata (sig_id, cell_id, pert_iname, etc.)"),
-    inst_info: Optional[str] = typer.Option(None, help="Optional inst_info table for additional metadata (not required)"),
-    repurposing: Optional[str] = typer.Option(None, help="Optional Repurposing Hub annotations (for MOA/targets)"),
-    pert_type: Optional[str] = typer.Option(None, help="Optional perturbation type filter (e.g., TRT_CP)"),
-    chunk_cols: int = typer.Option(0, help="If >0, write GCTX conversion in column chunks"),
-    partition_by: Optional[str] = typer.Option(None, help="Optional column to partition Parquet dataset by (e.g., cell_line)"),
+    landmarks_file: Optional[str] = typer.Option(
+        None,
+        help="Optional override path to L1000 landmark list",
+    ),
+    gctx: Optional[str] = typer.Option(
+        None,
+        help="Optional Level 5 GCTX to convert to long format",
+    ),
+    gene_info: Optional[str] = typer.Option(
+        None,
+        help="Optional gene_info table for mapping IDs to symbols",
+    ),
+    sig_info: Optional[str] = typer.Option(
+        None,
+        help="Optional sig_info table for metadata (sig_id, cell_id, pert_iname, etc.)",
+    ),
+    inst_info: Optional[str] = typer.Option(
+        None,
+        help="Optional inst_info table for additional metadata (not required)",
+    ),
+    repurposing: Optional[str] = typer.Option(
+        None,
+        help="Optional Repurposing Hub annotations (for MOA/targets)",
+    ),
+    pert_type: Optional[str] = typer.Option(
+        None,
+        help="Optional perturbation type filter (e.g., TRT_CP)",
+    ),
+    chunk_cols: int = typer.Option(
+        0,
+        help="If >0, write GCTX conversion in column chunks",
+    ),
+    partition_by: Optional[str] = typer.Option(
+        None,
+        help="Optional column to partition Parquet dataset by (e.g., cell_line)",
+    ),
 ) -> None:
     out = Path(output)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -105,7 +144,12 @@ def prepare_lincs(
                 df = pd.DataFrame()
         if not df.empty:
             typer.echo(
-                f"Wrote {len(df):,} rows, {df['signature_id'].nunique():,} signatures, {df['gene_symbol'].nunique():,} genes -> {out}"
+                (
+                    "Wrote "
+                    f"{len(df):,} rows, "
+                    f"{df['signature_id'].nunique():,} signatures, "
+                    f"{df['gene_symbol'].nunique():,} genes -> {out}"
+                )
             )
         else:
             typer.echo(f"Wrote -> {out}")
@@ -159,13 +203,30 @@ def make_target(
     up_file: Optional[str] = typer.Option(None, help="Text file of up genes"),
     down_file: Optional[str] = typer.Option(None, help="Text file of down genes"),
     output: str = typer.Option("target.json", help="Output JSON path for TargetSignature"),
+    pseudobulk_key: Optional[str] = typer.Option(
+        None,
+        help="Optional obs column to aggregate cells into pseudobulk replicates",
+    ),
+    qc_report: Optional[str] = typer.Option(
+        None,
+        help="Optional path to write QC summary JSON",
+    ),
+    library_genes: Optional[str] = typer.Option(
+        None,
+        help="Optional newline-delimited gene list to estimate library overlap",
+    ),
 ) -> None:
     if h5ad:
         if not (cluster_key and cluster):
             raise typer.BadParameter("--cluster-key and --cluster required with --h5ad")
         adata = load_h5ad(h5ad)
         ts = target_from_cluster(
-            adata, cluster_key=cluster_key, cluster=str(cluster), reference=reference, method=method
+            adata,
+            cluster_key=cluster_key,
+            cluster=str(cluster),
+            reference=reference,
+            method=method,
+            pseudobulk_key=pseudobulk_key,
         )
     else:
         if not (up_file or down_file):
@@ -184,7 +245,21 @@ def make_target(
 
     out = Path(output)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(ts.model_dump()))
+    lib_genes = None
+    if library_genes and Path(library_genes).exists():
+        lib_genes = [
+            line.strip()
+            for line in Path(library_genes).read_text().splitlines()
+            if line.strip()
+        ]
+    qc_summary = summarize_target_signature(ts, library_genes=lib_genes)
+    payload = ts.model_copy(
+        update={"metadata": {**ts.metadata, "qc_summary": qc_summary}}
+    )
+    out.write_text(json.dumps(payload.model_dump()))
+    if qc_report:
+        Path(qc_report).parent.mkdir(parents=True, exist_ok=True)
+        Path(qc_report).write_text(json.dumps(qc_summary, indent=2))
     typer.echo(f"Wrote target to {out}")
 
 
@@ -197,21 +272,63 @@ def score(
     top_k: int = typer.Option(50, help="Top-k rows to return"),
     blend: float = typer.Option(0.5, help="Blend weight for metric"),
     output: Optional[str] = typer.Option(None, help="Optional output Parquet path"),
-    cell_line: Optional[str] = typer.Option(None, help="Optional cell line filter to reduce library size"),
-    cell_lines: Optional[List[str]] = typer.Option(None, help="Optional list of cell lines (repeat flag)", rich_help_panel="Filtering"),
+    cell_line: Optional[str] = typer.Option(
+        None,
+        help="Optional cell line filter to reduce library size",
+    ),
+    cell_lines: Optional[List[str]] = typer.Option(
+        None,
+        help="Optional list of cell lines (repeat flag)",
+        rich_help_panel="Filtering",
+    ),
     moa: Optional[str] = typer.Option(None, help="Optional MOA filter"),
-    moas: Optional[List[str]] = typer.Option(None, help="Optional list of MOAs (repeat flag)", rich_help_panel="Filtering"),
-    pert_type: Optional[str] = typer.Option(None, help="Optional perturbation type (e.g., TRT_CP)"),
-    pert_types: Optional[List[str]] = typer.Option(None, help="Optional list of perturbation types", rich_help_panel="Filtering"),
+    moas: Optional[List[str]] = typer.Option(
+        None,
+        help="Optional list of MOAs (repeat flag)",
+        rich_help_panel="Filtering",
+    ),
+    pert_type: Optional[str] = typer.Option(
+        None,
+        help="Optional perturbation type (e.g., TRT_CP)",
+    ),
+    pert_types: Optional[List[str]] = typer.Option(
+        None,
+        help="Optional list of perturbation types",
+        rich_help_panel="Filtering",
+    ),
     compound: Optional[str] = typer.Option(None, help="Optional compound name filter"),
-    compounds: Optional[List[str]] = typer.Option(None, help="Optional list of compounds (repeat flag)"),
-    dose_range: Optional[str] = typer.Option(None, help="Dose range as 'min,max' on pert_dose if available", rich_help_panel="Filtering"),
-    time_range: Optional[str] = typer.Option(None, help="Time range as 'min,max' on pert_time if available", rich_help_panel="Filtering"),
-    touchstone: bool = typer.Option(False, help="Restrict to Touchstone signatures if 'is_gold' flag available"),
+    compounds: Optional[List[str]] = typer.Option(
+        None,
+        help="Optional list of compounds (repeat flag)",
+    ),
+    dose_range: Optional[str] = typer.Option(
+        None,
+        help="Dose range as 'min,max' on pert_dose if available",
+        rich_help_panel="Filtering",
+    ),
+    time_range: Optional[str] = typer.Option(
+        None,
+        help="Time range as 'min,max' on pert_time if available",
+        rich_help_panel="Filtering",
+    ),
+    touchstone: bool = typer.Option(
+        False,
+        help="Restrict to Touchstone signatures if 'is_gold' flag available",
+    ),
+    collapse_replicates: bool = typer.Option(
+        False,
+        help="Apply MODZ-style replicate collapsing when 'replicate_id' column is present",
+        rich_help_panel="Preprocessing",
+    ),
 ) -> None:
     def _summarize(df: pd.DataFrame) -> dict:
         out = {"rows": int(len(df))}
-        for col, key in [("signature_id", "signatures"), ("compound", "compounds"), ("cell_line", "cell_lines")]:
+        columns = [
+            ("signature_id", "signatures"),
+            ("compound", "compounds"),
+            ("cell_line", "cell_lines"),
+        ]
+        for col, key in columns:
             if col in df.columns:
                 out[key] = int(df[col].nunique())
         return out
@@ -255,7 +372,17 @@ def score(
     dose_rng = _parse_range(dose_range)
     time_rng = _parse_range(time_range)
 
-    if selected_cells or selected_moas or selected_ptypes or selected_compounds or dose_rng or time_rng or touchstone:
+    if any(
+        [
+            selected_cells,
+            selected_moas,
+            selected_ptypes,
+            selected_compounds,
+            dose_rng,
+            time_rng,
+            touchstone,
+        ]
+    ):
         try:
             import pyarrow.dataset as ds  # local import; optional
 
@@ -266,34 +393,50 @@ def score(
             if selected_cells and "cell_line" in names:
                 exprs.append(ds.field("cell_line").isin(sorted(set(selected_cells))))
             elif selected_cells:
-                warnings.append("Requested cell_line filter but column 'cell_line' not found; ignoring.")
+                warnings.append(
+                    "Requested cell_line filter but column 'cell_line' not found; ignoring."
+                )
             if selected_moas and "moa" in names:
                 exprs.append(ds.field("moa").isin(sorted(set(selected_moas))))
             elif selected_moas:
-                warnings.append("Requested MOA filter but column 'moa' not found; ignoring.")
+                warnings.append(
+                    "Requested MOA filter but column 'moa' not found; ignoring."
+                )
             if selected_ptypes and "pert_type" in names:
                 exprs.append(ds.field("pert_type").isin(sorted(set(selected_ptypes))))
             elif selected_ptypes:
-                warnings.append("Requested pert_type filter but column 'pert_type' not found; ignoring.")
+                warnings.append(
+                    "Requested pert_type filter but column 'pert_type' not found; ignoring."
+                )
             if selected_compounds and "compound" in names:
                 exprs.append(ds.field("compound").isin(sorted(set(selected_compounds))))
             elif selected_compounds:
-                warnings.append("Requested compound filter but column 'compound' not found; ignoring.")
+                warnings.append(
+                    "Requested compound filter but column 'compound' not found; ignoring."
+                )
             if dose_rng and "pert_dose" in names:
                 lo, hi = dose_rng
                 exprs.append((ds.field("pert_dose") >= lo) & (ds.field("pert_dose") <= hi))
             elif dose_rng:
-                warnings.append("Requested pert_dose range but column 'pert_dose' not found; ignoring.")
+                warnings.append(
+                    "Requested pert_dose range but column 'pert_dose' not found; ignoring."
+                )
             if time_rng and "pert_time" in names:
                 lo, hi = time_rng
                 exprs.append((ds.field("pert_time") >= lo) & (ds.field("pert_time") <= hi))
             elif time_rng:
-                warnings.append("Requested pert_time range but column 'pert_time' not found; ignoring.")
+                warnings.append(
+                    "Requested pert_time range but column 'pert_time' not found; ignoring."
+                )
             if touchstone and "is_gold" in names:
                 # Accept common truthy forms
-                exprs.append((ds.field("is_gold") == True) | (ds.field("is_gold") == 1) | (ds.field("is_gold") == "1") | (ds.field("is_gold") == "true") | (ds.field("is_gold") == "True"))
+                exprs.append(
+                    ds.field("is_gold").isin([True, 1, "1", "1.0", "true", "True"])
+                )
             elif touchstone:
-                warnings.append("Requested --touchstone but column 'is_gold' not found; ignoring.")
+                warnings.append(
+                    "Requested --touchstone but column 'is_gold' not found; ignoring."
+                )
             if not exprs:
                 # No applicable columns; fall back
                 raise RuntimeError("No applicable filter columns present in dataset")
@@ -318,16 +461,19 @@ def score(
                 "time_range": time_rng,
                 "touchstone": bool(touchstone),
             }
-            typer.echo(
-                f"[info] filter summary: " + \
-                ", ".join([f"{k}={v}" for k, v in summary_filters.items() if v]),
-                err=True,
-            )
+            summary_text = ", ".join([f"{k}={v}" for k, v in summary_filters.items() if v])
+            if summary_text:
+                typer.echo(f"[info] filter summary: {summary_text}", err=True)
             post_stats = _summarize(df_long)
             if pre_rows >= 0:
-                typer.echo(f"[info] rows pre-filter={pre_rows:,} post-filter={post_stats['rows']:,}", err=True)
+                typer.echo(
+                    f"[info] rows pre-filter={pre_rows:,} post-filter={post_stats['rows']:,}",
+                    err=True,
+                )
             else:
-                typer.echo(f"[info] rows post-filter={post_stats['rows']:,}", err=True)
+                typer.echo(
+                    f"[info] rows post-filter={post_stats['rows']:,}", err=True
+                )
         except Exception:
             # Fallback: load entire table then filter
             df_full = load_lincs_long(library)
@@ -336,36 +482,57 @@ def score(
             if selected_cells and "cell_line" in df_long.columns:
                 df_long = df_long[df_long["cell_line"].astype(str).isin(set(selected_cells))]
             elif selected_cells:
-                typer.echo("[warn] Requested cell_line filter but column 'cell_line' not found; ignoring.", err=True)
+                typer.echo(
+                    "[warn] Requested cell_line filter but column 'cell_line' not found; ignoring.",
+                    err=True,
+                )
             if selected_moas and "moa" in df_long.columns:
                 df_long = df_long[df_long["moa"].astype(str).isin(set(selected_moas))]
             elif selected_moas:
-                typer.echo("[warn] Requested MOA filter but column 'moa' not found; ignoring.", err=True)
+                typer.echo(
+                    "[warn] Requested MOA filter but column 'moa' not found; ignoring.",
+                    err=True,
+                )
             if selected_ptypes and "pert_type" in df_long.columns:
                 df_long = df_long[df_long["pert_type"].astype(str).isin(set(selected_ptypes))]
             elif selected_ptypes:
-                typer.echo("[warn] Requested pert_type filter but column 'pert_type' not found; ignoring.", err=True)
+                typer.echo(
+                    "[warn] Requested pert_type filter but column 'pert_type' not found; ignoring.",
+                    err=True,
+                )
             if selected_compounds and "compound" in df_long.columns:
                 df_long = df_long[df_long["compound"].astype(str).isin(set(selected_compounds))]
             elif selected_compounds:
-                typer.echo("[warn] Requested compound filter but column 'compound' not found; ignoring.", err=True)
+                typer.echo(
+                    "[warn] Requested compound filter but column 'compound' not found; ignoring.",
+                    err=True,
+                )
             if dose_rng and "pert_dose" in df_long.columns:
                 lo, hi = dose_rng
                 vals = pd.to_numeric(df_long["pert_dose"], errors="coerce")
                 df_long = df_long[(vals >= lo) & (vals <= hi)]
             elif dose_rng:
-                typer.echo("[warn] Requested pert_dose range but column 'pert_dose' not found; ignoring.", err=True)
+                typer.echo(
+                    "[warn] Requested pert_dose range but column 'pert_dose' not found; ignoring.",
+                    err=True,
+                )
             if time_rng and "pert_time" in df_long.columns:
                 lo, hi = time_rng
                 vals = pd.to_numeric(df_long["pert_time"], errors="coerce")
                 df_long = df_long[(vals >= lo) & (vals <= hi)]
             elif time_rng:
-                typer.echo("[warn] Requested pert_time range but column 'pert_time' not found; ignoring.", err=True)
+                typer.echo(
+                    "[warn] Requested pert_time range but column 'pert_time' not found; ignoring.",
+                    err=True,
+                )
             if touchstone and "is_gold" in df_long.columns:
                 s = df_long["is_gold"].astype(str).str.lower()
                 df_long = df_long[s.isin({"1", "true", "yes"}) | (s == "1.0")]
             elif touchstone:
-                typer.echo("[warn] Requested --touchstone but column 'is_gold' not found; ignoring.", err=True)
+                typer.echo(
+                    "[warn] Requested --touchstone but column 'is_gold' not found; ignoring.",
+                    err=True,
+                )
             df_long = df_long.reset_index(drop=True)
             summary_filters = {
                 "cell_line": sorted(set(selected_cells)) if selected_cells else None,
@@ -376,15 +543,19 @@ def score(
                 "time_range": time_rng,
                 "touchstone": bool(touchstone),
             }
+            summary_text = ", ".join([f"{k}={v}" for k, v in summary_filters.items() if v])
+            if summary_text:
+                typer.echo(f"[info] filter summary: {summary_text}", err=True)
+            post_stats = _summarize(df_long)
             typer.echo(
-                f"[info] filter summary: " + \
-                ", ".join([f"{k}={v}" for k, v in summary_filters.items() if v]),
+                f"[info] rows pre-filter={pre_rows:,} post-filter={post_stats['rows']:,}",
                 err=True,
             )
-            post_stats = _summarize(df_long)
-            typer.echo(f"[info] rows pre-filter={pre_rows:,} post-filter={post_stats['rows']:,}", err=True)
     else:
         df_long = load_lincs_long(library)
+    if collapse_replicates and "replicate_id" in df_long.columns:
+        df_long = collapse_replicates_modz(df_long)
+
     res = rank_drugs(ts, df_long, method=method, model_path=model_path, top_k=top_k, blend=blend)
     out_df = pd.DataFrame(res.model_dump()["ranking"])  # serialized as list-of-dicts
     if output:

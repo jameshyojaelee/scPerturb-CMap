@@ -21,8 +21,14 @@ We want to find drugs that invert a disease signature observed in a specific cel
 - Results (parquet/csv): `signature_id, compound, cell_line, moa?, target?, score`
 
 ## Methods
-- Baseline: ensemble of cosine connectivity (lower is better) and GSEA-style enrichment (higher is better; flipped and z-scored to combine). No training required.
-- Metric: Dual-tower MLP (DualEncoder) trained with NT-Xent or Triplet loss on inversion pairs; scores are blended with the baseline.
+- Baseline: ensemble of cosine connectivity (lower is better) and GSEA-style enrichment (higher is better; flipped and z-scored to combine). Results now include per-signature z-scores and two-sided p-values derived from the blended ensemble.
+- Metric: Dual-tower MLP (DualEncoder) trained with NT-Xent or Triplet loss on inversion pairs; scores are blended with the baseline. The training script can ingest real LINCS-derived inversion tables or fall back to synthetic toy data.
+
+## Highlights
+- **Replicate-aware preprocessing.** `scperturb-cmap score --collapse-replicates` performs MODZ-style collapse when a `replicate_id` column is available.
+- **Richer target engineering.** `scperturb-cmap make-target` accepts pseudobulk grouping (`--pseudobulk-key`) and emits QC summaries (overlap counts, gene balance) that feed into the UI.
+- **Pair generation for metric learning.** Utilities under `scperturb_cmap.data.pairs` build inversion pair tables with automatic negative sampling to bootstrap real-data training.
+- **Dashboards.** The Streamlit UI surfaces target QC, MOA bar charts, and cell line heatmaps for quick storytelling.
 
 ## Quickstart
 
@@ -37,6 +43,7 @@ make demo
 scperturb-cmap score \
   --target-json examples/out/target.json \
   --library examples/data/lincs_demo.parquet \
+  --collapse-replicates \
   --method baseline --top-k 50 --output examples/out/results.parquet
 
 # Launch the Streamlit demo UI
@@ -53,6 +60,21 @@ make test
 
 ## HPC Setup
 - For cluster-specific setup, directories, and Slurm examples, see `docs/hpc.md`.
+
+## Training on real inversion pairs
+1. Build a table of known inversions with one row per `(target_id, signature_id)` pair (see `scperturb_cmap.data.pairs.prepare_pair_table`). Save as CSV/Parquet with columns `left_id`, `right_id`, `label` (1 for positives, 0 for negatives). If you only provide positives, the helper will sample negatives on the fly.
+2. Export target signatures as JSON Lines where each record contains `target_id`, `genes`, and `weights` (e.g. produced by `scperturb-cmap make-target --qc-report`).
+3. Run:
+
+```bash
+scperturb-cmap train pairs_path=/path/to/pairs.parquet \
+  targets_path=/path/to/targets.jsonl \
+  library_path=/path/to/lincs_long.parquet \
+  negatives_per_target=5 \
+  epochs=10 batch_size=128
+```
+
+The trainer auto-detects the gene dimension from the library subset, saves `artifacts/best.pt`, and logs `metrics.json` with the best validation recall.
 
 ### Preparing real LINCS L1000 Level 5
 
@@ -100,9 +122,9 @@ Notes:
 - On HPCs with NVIDIA GPUs, CUDA is used; otherwise CPU is used with reasonable defaults.
 
 ## Acceptance Criteria
-1) Baseline scoring on the demo completes in under 60 seconds on a typical laptop.
+1) Baseline scoring on the demo completes in under 60 seconds on a typical laptop and reports z-scores/p-values.
 2) The DualEncoder improves Recall@50 over the baseline by at least 10% absolute on the demo (synthetic acceptance harness) when trained for a few epochs.
-3) The UI loads the demo and can export a ranked CSV from the results table.
+3) The UI loads the demo, surfaces target QC and MOA analytics, and can export a ranked CSV from the results table.
 
 Run a basic acceptance check:
 
@@ -110,7 +132,9 @@ Run a basic acceptance check:
 make acceptance
 ```
 
-This script measures baseline scoring time, trains a short model, and verifies recall improvement on a synthetic retrieval task.
+This script measures baseline scoring time, materializes a small inversion dataset under
+`examples/out/metric_dataset/`, trains the DualEncoder with real pair/target files, and
+verifies that recall@5 improves by at least 10 percentage points over the untrained model.
 
 ## Contributing
 

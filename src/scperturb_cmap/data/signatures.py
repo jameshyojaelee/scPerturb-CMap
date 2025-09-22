@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Iterable, Dict, Any
 
 import numpy as np
 
@@ -11,7 +11,7 @@ except Exception:  # pragma: no cover - optional vectorized rank support
     sp = None  # type: ignore
     rankdata = None  # type: ignore
 
-from scperturb_cmap.data.preprocess import standardize_vector
+from scperturb_cmap.data.preprocess import standardize_vector, harmonize_symbols
 from scperturb_cmap.io.schemas import TargetSignature
 
 
@@ -20,6 +20,19 @@ def _to_numpy(X) -> np.ndarray:
         return X.toarray()
     # anndata may store as numpy.matrix; ensure 2D ndarray
     return np.asarray(X)
+
+
+def _pseudobulk_means(matrix: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    unique_groups = np.unique(groups)
+    profs = []
+    for g in unique_groups:
+        mask = groups == g
+        if not mask.any():
+            continue
+        profs.append(matrix[mask].mean(axis=0))
+    if not profs:
+        raise ValueError("No cells remained after pseudobulk grouping")
+    return np.vstack(profs)
 
 
 def _rank_biserial_weights(group1: np.ndarray, group2: np.ndarray) -> np.ndarray:
@@ -62,6 +75,7 @@ def target_from_cells(
     target_barcodes: List[str],
     ref_barcodes: Optional[List[str]] = None,
     method: str = "rank_biserial",
+    pseudobulk_key: Optional[str] = None,
 ) -> TargetSignature:
     """Construct a TargetSignature from selected cells.
 
@@ -80,11 +94,17 @@ def target_from_cells(
     if not ref_mask.any():
         raise ValueError("No reference cells selected")
 
-    X = _to_numpy(adata.X)
-    X = np.asarray(X, dtype=float)
+    X = np.asarray(_to_numpy(adata.X), dtype=float)
 
     g1 = X[target_mask, :]
     g2 = X[ref_mask, :]
+
+    if pseudobulk_key:
+        if pseudobulk_key not in adata.obs.columns:
+            raise KeyError(f"pseudobulk_key '{pseudobulk_key}' not found in adata.obs")
+        groups = adata.obs[pseudobulk_key].astype(str).to_numpy()
+        g1 = _pseudobulk_means(g1, groups[target_mask])
+        g2 = _pseudobulk_means(g2, groups[ref_mask])
 
     if method == "rank_biserial":
         weights = _rank_biserial_weights(g1, g2)
@@ -115,6 +135,7 @@ def target_from_cluster(
     cluster: str,
     reference: str = "rest",
     method: str = "rank_biserial",
+    pseudobulk_key: Optional[str] = None,
 ) -> TargetSignature:
     """Construct a TargetSignature comparing a cluster to reference (default: rest)."""
     if cluster_key not in adata.obs.columns:
@@ -133,6 +154,7 @@ def target_from_cluster(
         target_barcodes=target_barcodes,
         ref_barcodes=ref_barcodes,
         method=method,
+        pseudobulk_key=pseudobulk_key,
     )
 
 
@@ -152,3 +174,25 @@ def target_from_gene_lists(up_genes: List[str], down_genes: List[str]) -> Target
 
     w = standardize_vector(np.asarray(weights, dtype=float))
     return TargetSignature(genes=genes, weights=w.tolist(), metadata={"method": "gene_lists"})
+
+
+def summarize_target_signature(
+    signature: TargetSignature,
+    *,
+    library_genes: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    genes = harmonize_symbols(signature.genes)
+    weights = np.asarray(signature.weights, dtype=float)
+    summary: Dict[str, Any] = {
+        "n_genes": int(len(genes)),
+        "n_positive": int((weights > 0).sum()),
+        "n_negative": int((weights < 0).sum()),
+        "weight_mean": float(weights.mean() if weights.size else 0.0),
+        "weight_std": float(weights.std(ddof=0) if weights.size else 0.0),
+    }
+    if library_genes is not None:
+        lib = set(harmonize_symbols(library_genes))
+        overlap = sum(1 for g in genes if g in lib)
+        summary["overlap_genes"] = int(overlap)
+        summary["overlap_fraction"] = float(overlap / max(1, len(genes)))
+    return summary

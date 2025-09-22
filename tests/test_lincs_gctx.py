@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
@@ -72,4 +70,3 @@ def test_gctx_to_long_with_mocked_reader(tmp_path, monkeypatch):
     assert set(long_df["gene_symbol"]) == {"GAPDH", "TP53"}
     # Repurposing join applied
     assert set(long_df["moa"].dropna().unique()) == {"MOA1", "MOA2"}
-

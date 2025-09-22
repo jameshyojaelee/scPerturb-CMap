@@ -17,12 +17,14 @@ from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.data.lincs_loader import load_lincs_long
 from scperturb_cmap.data.scrna_loader import load_h5ad
 from scperturb_cmap.data.signatures import (
+    summarize_target_signature,
     target_from_cluster,
     target_from_gene_lists,
 )
 from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.viz.plots import (
     plot_moa_enrichment_bar,
+    plot_moa_enrichment_heatmap,
 )
 
 st.set_page_config(page_title="scPerturb-CMap Demo", layout="wide")
@@ -136,6 +138,14 @@ def sidebar_controls(
     else:
         # Demo: simple up/down lists overlapping custom demo library
         target_sig = target_from_gene_lists(["G1", "G2", "G3"], ["G10", "G11"]) 
+
+    lib_genes = (
+        lincs_long["gene_symbol"].astype(str).unique().tolist()
+        if "gene_symbol" in lincs_long.columns
+        else None
+    )
+    qc_summary = summarize_target_signature(target_sig, library_genes=lib_genes)
+    target_sig.metadata = {**target_sig.metadata, "qc_summary": qc_summary}
 
     st.sidebar.header("Scoring")
     method = st.sidebar.selectbox("Method", ["baseline", "metric"]) 
@@ -268,6 +278,14 @@ def main():
     col1, col2 = st.columns([1, 2])
     with col1:
         plot_signature(target_sig)
+        summary = (
+            target_sig.metadata.get("qc_summary", {})
+            if isinstance(target_sig.metadata, dict)
+            else {}
+        )
+        if summary:
+            st.markdown("**Target QC**")
+            st.dataframe(pd.DataFrame(summary.items(), columns=["metric", "value"]))
 
     # Filter library by selected cell line if any
     if cln and "cell_line" in lincs_long.columns:
@@ -301,6 +319,7 @@ def main():
                 if isinstance(res.ranking, pd.DataFrame)
                 else pd.DataFrame(res.ranking)
             )
+            st.session_state["results_df"] = ranking_df
             st.subheader("Results")
             show_cols = [
                 c
@@ -362,8 +381,10 @@ def main():
     # MOA enrichment
     if st.session_state.get("results_df") is not None:
         df_cached = st.session_state["results_df"]
-        e_df = moa_enrichment(df_cached, top_n=50)
-        st.plotly_chart(plot_moa_enrichment_bar(e_df), use_container_width=True)
+        if not df_cached.empty:
+            e_df = moa_enrichment(df_cached, top_n=50)
+            st.plotly_chart(plot_moa_enrichment_bar(e_df), use_container_width=True)
+            st.plotly_chart(plot_moa_enrichment_heatmap(df_cached), use_container_width=True)
 
 
 if __name__ == "__main__":

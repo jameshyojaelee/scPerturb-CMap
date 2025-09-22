@@ -6,14 +6,18 @@ import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 from hydra import main as hydra_main
 from omegaconf import OmegaConf
 
+from scperturb_cmap.data.lincs_loader import load_lincs_long, pivot_signatures
+from scperturb_cmap.data.preprocess import harmonize_symbols, standardize_vector
+from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.models.dual_encoder import DualEncoder
 from scperturb_cmap.utils.device import get_device
 from scperturb_cmap.utils.seed import set_global_seed
@@ -47,6 +51,10 @@ class TrainConfig:
 
     # misc
     device: str = "auto"  # auto | cpu | cuda | mps
+    pairs_path: Optional[str] = None
+    targets_path: Optional[str] = None
+    library_path: Optional[str] = None
+    negatives_per_target: int = 3
 
 
 def set_seed(seed: int) -> None:
@@ -88,9 +96,12 @@ def make_synthetic(
 def sample_pos_batch(
     left_ids: List[str], pos_map: Dict[str, List[str]], batch_size: int
 ) -> List[Tuple[str, str]]:
+    eligible = [lid for lid in left_ids if pos_map.get(lid)]
+    if not eligible:
+        raise ValueError("No positive pairs available for sampling")
     batch: List[Tuple[str, str]] = []
     for _ in range(batch_size):
-        lid = random.choice(left_ids)
+        lid = random.choice(eligible)
         rid = random.choice(pos_map[lid])
         batch.append((lid, rid))
     return batch
@@ -102,13 +113,106 @@ def sample_triplet_batch(
     neg_map: Dict[str, List[str]],
     batch_size: int,
 ) -> List[Tuple[str, str, str]]:
+    eligible = [lid for lid in left_ids if pos_map.get(lid) and neg_map.get(lid)]
+    if not eligible:
+        raise ValueError("Triplet sampling requires at least one positive and negative per target")
     batch: List[Tuple[str, str, str]] = []
     for _ in range(batch_size):
-        lid = random.choice(left_ids)
+        lid = random.choice(eligible)
         pid = random.choice(pos_map[lid])
         nid = random.choice(neg_map[lid])
         batch.append((lid, pid, nid))
     return batch
+
+
+def _load_targets(path: str, gene_reference: List[str]) -> Dict[str, np.ndarray]:
+    ref_genes = harmonize_symbols(gene_reference)
+    index_map = {g: i for i, g in enumerate(ref_genes)}
+
+    targets: Dict[str, np.ndarray] = {}
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if "genes" not in record or "weights" not in record:
+            raise ValueError("Targets JSONL must contain 'genes' and 'weights'")
+        sig = TargetSignature(genes=record["genes"], weights=record["weights"])
+        vec = np.zeros(len(ref_genes), dtype=float)
+        for g, w in zip(harmonize_symbols(sig.genes), sig.weights):
+            if g in index_map:
+                vec[index_map[g]] = w
+        vec = standardize_vector(vec).astype(np.float32)
+        key = record.get("target_id") or record.get("id") or sig.metadata.get("id")
+        if key is None:
+            raise ValueError("Targets JSONL must provide 'target_id' or 'id' for each record")
+        targets[str(key)] = vec
+    if not targets:
+        raise ValueError("No targets were loaded from targets_path")
+    return targets
+
+
+def _build_maps(
+    pairs: pd.DataFrame,
+) -> Tuple[List[str], Dict[str, List[str]], Dict[str, List[str]]]:
+    left_ids = sorted(pairs["left_id"].unique())
+    pos_map: Dict[str, List[str]] = {lid: [] for lid in left_ids}
+    neg_map: Dict[str, List[str]] = {lid: [] for lid in left_ids}
+    for _, row in pairs.iterrows():
+        lid, rid, label = str(row["left_id"]), str(row["right_id"]), int(row["label"])
+        if label == 1:
+            pos_map.setdefault(lid, []).append(rid)
+        else:
+            neg_map.setdefault(lid, []).append(rid)
+    return left_ids, pos_map, neg_map
+
+
+def load_real_dataset(
+    pairs_path: str,
+    library_path: str,
+    targets_path: str,
+    negatives_per_target: int,
+    seed: int,
+) -> Tuple[Dict[str, np.ndarray], List[str], Dict[str, List[str]], Dict[str, List[str]]]:
+    if pairs_path.endswith(".parquet"):
+        pairs_df = pd.read_parquet(pairs_path)
+    else:
+        pairs_df = pd.read_csv(pairs_path)
+    if not {"left_id", "right_id", "label"}.issubset(set(pairs_df.columns)):
+        raise ValueError("pairs_path must contain columns left_id,right_id,label")
+
+    library = load_lincs_long(library_path)
+    needed = set(pairs_df["right_id"].astype(str))
+    library = library[library["signature_id"].astype(str).isin(needed)].copy()
+    if library.empty:
+        raise ValueError("No signatures from pairs found in library")
+
+    M, genes, meta = pivot_signatures(library)
+    right_vectors = {
+        str(sig): M[i].astype(np.float32)
+        for i, sig in enumerate(meta["signature_id"].astype(str))
+    }
+
+    targets = _load_targets(targets_path, harmonize_symbols(genes))
+
+    vectors: Dict[str, np.ndarray] = {**right_vectors}
+    for tid, vec in targets.items():
+        vectors[str(tid)] = np.asarray(vec, dtype=np.float32)
+
+    left_ids, pos_map, neg_map = _build_maps(pairs_df)
+
+    # If negatives missing for some targets, sample from remaining signatures
+    rng = np.random.default_rng(seed)
+    all_signatures = sorted(right_vectors.keys())
+    for lid in left_ids:
+        if pos_map.get(lid):
+            candidate = [s for s in all_signatures if s not in pos_map[lid]]
+        else:
+            candidate = all_signatures
+        if not neg_map.get(lid) and candidate:
+            k = min(max(1, negatives_per_target), len(candidate))
+            neg_map[lid] = rng.choice(candidate, size=k, replace=False).tolist()
+
+    return vectors, left_ids, pos_map, neg_map
 
 
 def recall_at_k(
@@ -171,15 +275,33 @@ def run(cfg: OmegaConf) -> None:
     device_t = torch.device("cuda" if device == "cuda" else ("mps" if device == "mps" else "cpu"))
 
     # Data
-    vectors, left_ids, pos_map, neg_map = make_synthetic(
-        cfg.input_dim, cfg.num_targets, cfg.pos_per_target, cfg.neg_per_target, cfg.seed
-    )
+    if cfg.pairs_path and cfg.library_path and cfg.targets_path:
+        vectors, left_ids, pos_map, neg_map = load_real_dataset(
+            cfg.pairs_path,
+            cfg.library_path,
+            cfg.targets_path,
+            cfg.negatives_per_target,
+            cfg.seed,
+        )
+        if vectors:
+            first_vec = next(iter(vectors.values()))
+            cfg.input_dim = int(len(first_vec))
+    else:
+        vectors, left_ids, pos_map, neg_map = make_synthetic(
+            cfg.input_dim, cfg.num_targets, cfg.pos_per_target, cfg.neg_per_target, cfg.seed
+        )
+
+    left_ids = [lid for lid in left_ids if pos_map.get(lid)]
+    if not left_ids:
+        raise ValueError("No positive pairs available; ensure pairs_path defines label==1 rows")
 
     # Split left_ids into train/val
     random.shuffle(left_ids)
     n_val = max(1, len(left_ids) // 5)
     val_left = left_ids[:n_val]
     train_left = left_ids[n_val:]
+    if not train_left:
+        train_left = val_left
 
     # Model and optimizer
     model = DualEncoder(input_dim=cfg.input_dim, embed_dim=64, p_dropout=0.1)
@@ -193,7 +315,8 @@ def run(cfg: OmegaConf) -> None:
 
     for epoch in range(int(cfg.epochs)):
         model.train()
-        steps = max(1, math.ceil(len(train_left) * len(pos_map[train_left[0]]) / cfg.batch_size))
+        max_pos = max(len(pos_map[lid]) for lid in train_left)
+        steps = max(1, math.ceil(len(train_left) * max_pos / max(1, cfg.batch_size)))
         running_loss = 0.0
 
         for _ in tqdm(range(steps), desc=f"epoch {epoch}"):

@@ -53,3 +53,24 @@ def plot_target_signature_bars(
     fig.update_layout(margin=dict(l=10, r=10, t=40, b=10), height=560)
     return fig
 
+
+def plot_moa_enrichment_heatmap(df: pd.DataFrame) -> go.Figure:
+    """Plot MOA enrichment scores as a heatmap grouped by cell line."""
+    if df is None or df.empty:
+        return go.Figure()
+    required = {"cell_line", "moa", "score"}
+    if not required.issubset(df.columns):
+        return go.Figure()
+    pivot = (
+        df.pivot_table(index="moa", columns="cell_line", values="score", aggfunc="mean")
+        .fillna(0.0)
+    )
+    fig = px.imshow(
+        pivot,
+        color_continuous_scale="RdBu_r",
+        aspect="auto",
+        origin="lower",
+        title="MOA enrichment heatmap",
+    )
+    fig.update_layout(margin=dict(l=10, r=10, t=40, b=10))
+    return fig

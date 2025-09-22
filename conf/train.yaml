@@ -13,4 +13,7 @@ seed: 0
 k: 5
 
 device: auto  # auto|cpu|cuda|mps
-
+pairs_path: null
+targets_path: null
+library_path: null
+negatives_per_target: 3

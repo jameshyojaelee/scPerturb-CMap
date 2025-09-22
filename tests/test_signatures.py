@@ -5,6 +5,7 @@ import numpy as np
 
 from scperturb_cmap.data.scrna_loader import load_h5ad
 from scperturb_cmap.data.signatures import (
+    summarize_target_signature,
     target_from_cells,
     target_from_cluster,
     target_from_gene_lists,
@@ -23,6 +24,7 @@ def make_toy_adata() -> ad.AnnData:
     )
     obs = {
         "cluster": ["A", "A", "B", "B"],
+        "patient": ["P1", "P1", "P1", "P2"],
     }
     var = {"gene_ids": ["g1", "g2", "g3"]}
     adata = ad.AnnData(X=X)
@@ -70,6 +72,26 @@ def test_target_from_gene_lists_standardization():
     assert w[0] > 0 and w[1] > 0 and w[2] < 0
 
 
+def test_target_from_cluster_pseudobulk():
+    adata = make_toy_adata()
+    ts_bulk = target_from_cluster(
+        adata,
+        cluster_key="cluster",
+        cluster="A",
+        reference="rest",
+        pseudobulk_key="patient",
+    )
+    assert len(ts_bulk.genes) == adata.n_vars
+
+
+def test_summarize_target_signature_overlap():
+    ts = target_from_gene_lists(["G1", "G2"], ["G3"])
+    summary = summarize_target_signature(ts, library_genes=["G1", "G3", "G4"])
+    assert summary["n_genes"] == 3
+    assert summary["overlap_genes"] == 2
+    assert summary["overlap_fraction"] == 2 / 3
+
+
 def test_load_h5ad_roundtrip(tmp_path):
     adata = make_toy_adata()
     path = tmp_path / "toy.h5ad"
@@ -77,4 +99,3 @@ def test_load_h5ad_roundtrip(tmp_path):
     loaded = load_h5ad(str(path))
     assert loaded.shape == adata.shape
     assert list(loaded.var_names) == list(adata.var_names)
-
