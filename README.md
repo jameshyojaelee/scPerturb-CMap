@@ -2,12 +2,12 @@
 
 _A single-cell connectivity mapping toolkit for drug repurposing._
 
-scPerturb-CMap scores small-molecule perturbations against disease signatures derived from single-cell RNA-seq or curated gene lists. The package ships with:
+scPerturb-CMap scores small-molecule perturbations against disease signatures derived from single-cell RNA-seq or curated gene lists, helping biologists turn troublesome cell states into prioritised drug hypotheses within hours. It plugs into common omics workflows (AnnData `.h5ad`, gene lists, LINCS Level 5) and emits interpretable z-scores, p-values, QC summaries, and MOA enrichments so experimental teams can triage hits quickly. The package ships with:
 
 - a fast baseline (cosine + GSEA ensemble) that emits z-scores and p-values,
 - a DualEncoder metric model that can be trained on real inversion pairs,
 - CLI utilities for LINCS ingestion, target construction, scoring, and training,
-- a Streamlit UI for interactive analysis and storytelling.
+- a Streamlit UI for interactive analysis.
 
 ---
 
@@ -203,4 +203,3 @@ Cluster-specific setup, Slurm examples, and environment hints live in [`docs/hpc
 ## License
 
 MIT License – see [`LICENSE`](LICENSE).
-
