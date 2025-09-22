@@ -87,7 +87,9 @@ Data Ingestion
 
 ### Converting GCTX Level 5 to long Parquet
 
-If you download Level 5 GCTX files, use the CLI to convert them to a long table with annotations. The script `scripts/prepare_lincs.sbatch` will automatically detect `.gctx` inputs and run:
+If you download Level 5 GCTX files, you can use either the CLI directly or the Slurm job to convert them into a long table with annotations.
+
+Option A — Run CLI directly (interactive node):
 
 ```bash
 # Optional: extract landmark genes from gene_info
@@ -97,6 +99,7 @@ scperturb-cmap landmarks --gene-info $RAW/gene_info.txt --output $SCPC_BASE/data
 scperturb-cmap prepare-lincs \
   --gctx $RAW/GSE92742_Broad_LINCS_Level5_COMPZ.MODZ.gctx \
   --gene-info $RAW/gene_info.txt \
+  --sig-info $RAW/GSE92742_Broad_LINCS_sig_info.txt.gz \
   --repurposing $RAW/repurposing_drugs.tsv \
   --landmarks \
   --partition-by cell_line \
@@ -106,6 +109,26 @@ scperturb-cmap prepare-lincs \
 The job writes into a single dataset directory:
 `$SCPC_BASE/data/lincs/lincs_level5_landmark_long/`.
 Use CLI `score --cell-line <ID>` to leverage predicate pushdown when reading.
+
+Option B — Submit a Slurm job (recommended on headless clusters):
+
+```bash
+# Ensure you have downloaded raw files into $SCPC_BASE/data/raw first.
+# Then submit the conversion job:
+sbatch scripts/convert_lincs_gctx.sbatch
+
+# Optional environment overrides (set before sbatch):
+#   SCPC_BASE=/path/to/base         # default: repo root
+#   GCTX=/path/to/file.gctx         # default: auto-detect in $SCPC_BASE/data/raw
+#   GENE_INFO=/path/to/gene_info.gz # default: auto-detect
+#   SIG_INFO=/path/to/sig_info.gz   # default: auto-detect
+#   REPURPOSING=/path/to/rep.tsv    # optional Repurposing Hub annotations
+#   CHUNK_COLS=2000                 # columns per chunk during write
+#   PARTITION=cell_line             # partition column (default)
+```
+
+The job writes a partitioned Parquet dataset by `cell_line` under
+`$SCPC_BASE/data/lincs/lincs_level5_landmark_long/` and validates it at the end.
 
 Troubleshooting
 ---------------

@@ -63,6 +63,8 @@ def prepare_lincs(
     landmarks_file: Optional[str] = typer.Option(None, help="Optional override path to L1000 landmark list"),
     gctx: Optional[str] = typer.Option(None, help="Optional Level 5 GCTX to convert to long format"),
     gene_info: Optional[str] = typer.Option(None, help="Optional gene_info table for mapping IDs to symbols"),
+    sig_info: Optional[str] = typer.Option(None, help="Optional sig_info table for metadata (sig_id, cell_id, pert_iname, etc.)"),
+    inst_info: Optional[str] = typer.Option(None, help="Optional inst_info table for additional metadata (not required)"),
     repurposing: Optional[str] = typer.Option(None, help="Optional Repurposing Hub annotations (for MOA/targets)"),
     pert_type: Optional[str] = typer.Option(None, help="Optional perturbation type filter (e.g., TRT_CP)"),
     chunk_cols: int = typer.Option(0, help="If >0, write GCTX conversion in column chunks"),
@@ -85,6 +87,8 @@ def prepare_lincs(
             gctx,
             gene_info_path=gene_info,
             repurposing_path=repurposing,
+            sig_info_path=sig_info,
+            inst_info_path=inst_info,
             landmarks=lm,
             pert_type=pert_type,
             out_path=str(out),
@@ -93,7 +97,12 @@ def prepare_lincs(
         )
         # If chunked write was used, df will be empty; emit a summary by reading the output head
         if df.empty and out.exists():
-            df = pd.read_parquet(out, engine="pyarrow")
+            # Best-effort summary; partitioned datasets may fail to load due to mixed
+            # dictionary/null encodings across chunks. In that case, just report path.
+            try:
+                df = pd.read_parquet(out, engine="pyarrow")
+            except Exception:
+                df = pd.DataFrame()
         if not df.empty:
             typer.echo(
                 f"Wrote {len(df):,} rows, {df['signature_id'].nunique():,} signatures, {df['gene_symbol'].nunique():,} genes -> {out}"

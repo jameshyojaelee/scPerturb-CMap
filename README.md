@@ -68,6 +68,7 @@ scperturb-cmap landmarks \
 scperturb-cmap prepare-lincs \
   --gctx /path/to/GSE92742_Broad_LINCS_Level5_COMPZ.MODZ.gctx \
   --gene-info /path/to/gene_info.txt \
+  --sig-info /path/to/GSE92742_Broad_LINCS_sig_info.txt.gz \
   --repurposing /path/to/repurposing_drugs.tsv \
   --landmarks \
   --partition-by cell_line \

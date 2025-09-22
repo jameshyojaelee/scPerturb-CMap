@@ -59,6 +59,10 @@ echo "Installing scPerturb-CMap with dev dependencies..."
 cd "$repo_root"
 pip install -e ".[dev]"
 
+# Install cmapPy for GCTX parsing
+echo "Installing cmapPy for GCTX support..."
+pip install cmapPy
+
 # Test device detection
 echo "Testing device detection..."
 python -c "from scperturb_cmap.utils.device import get_device; print(f'PyTorch device: {get_device()}')"

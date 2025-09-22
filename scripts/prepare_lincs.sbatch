@@ -40,13 +40,17 @@ for g in "$RAW"/*.gctx; do
   out="$LNX/lincs_level5_landmark_long"  # partitioned dataset directory
   echo "[prep] GCTX $g -> $out (partitioned by cell_line)"
   # Optional metadata files if present
-  GENE_INFO=""; REPURPOSING=""
+  GENE_INFO=""; REPURPOSING=""; SIG_INFO=""; INST_INFO=""
   for c in "$RAW"/gene_info*.txt*; do [[ -f "$c" ]] && GENE_INFO="$c" && break; done
   for r in "$RAW"/repurposing*.*; do [[ -f "$r" ]] && REPURPOSING="$r" && break; done
+  for s in "$RAW"/GSE*_sig_info*.txt*; do [[ -f "$s" ]] && SIG_INFO="$s" && break; done
+  for i in "$RAW"/GSE*_inst_info*.txt*; do [[ -f "$i" ]] && INST_INFO="$i" && break; done
   scperturb-cmap prepare-lincs \
     --gctx "$g" \
     ${GENE_INFO:+--gene-info "$GENE_INFO"} \
     ${REPURPOSING:+--repurposing "$REPURPOSING"} \
+    ${SIG_INFO:+--sig-info "$SIG_INFO"} \
+    ${INST_INFO:+--inst-info "$INST_INFO"} \
     --landmarks \
     --partition-by cell_line \
     --output "$out"
