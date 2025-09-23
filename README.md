@@ -161,7 +161,6 @@ Tips:
 - displays ranked results alongside MOA enrichment bars and heatmaps,
 - supports CSV/JSON exports.
 
-### Update
 Example top-20 predicted inversions (NSCLC CD8+ T target):
 ![Top-20 NSCLC](docs/assets/top20_nsclc.png)
 
