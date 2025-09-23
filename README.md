@@ -152,7 +152,7 @@ Tips:
 ---
 
 ## Streamlit UI
-
+![Streamlit UI](docs/assets/ui.png)
 `make ui` launches a browser app that:
 - loads the demo LINCS table by default (override with `--lincs <path>` or `SCPC_LINCS`),
 - allows target creation from gene lists or uploaded `.h5ad` files,
