@@ -9,3 +9,7 @@ All notable changes to this project will be documented in this file.
 - Baseline (cosine + GSEA) connectivity with z- and p-values.
 - Streamlit UI with QC, MOA enrichment, and exports.
 - Acceptance harness and tests.
+
+## [0.1.1] - 2025-09-24
+### Fixed
+- pyproject.toml PEP 621 fields (remove invalid inline urls table and extraneous field) for CI build.
