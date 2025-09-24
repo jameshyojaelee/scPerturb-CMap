@@ -163,11 +163,14 @@ def rank_drugs(
         missing = [g for g in t_genes if g not in set(lib_genes)][:10]
         hint = (
             "Insufficient gene overlap. Consider mapping symbols (validate-h5ad), "
-            "supplying --library-genes to make-target for QC, or restricting to L1000 landmarks."
+            "supplying --library-genes to make-target for QC, or restricting to "
+            "L1000 landmarks."
         )
-        raise ValueError(
-            f"Insufficient gene overlap: {overlap} < 150. Example missing target genes: {missing}. {hint}"
+        msg = (
+            f"Insufficient gene overlap: {overlap} < 150. "
+            f"Example missing target genes: {missing}. {hint}"
         )
+        raise ValueError(msg)
 
     # Baseline ensemble (lower is better)
     cos_df = cosine_connectivity(target_signature, M, genes, meta)

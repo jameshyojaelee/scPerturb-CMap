@@ -50,7 +50,11 @@ def results_to_cellxgene(df: pd.DataFrame, *, obs_metadata: Dict[str, Any] | Non
     obs = df.copy()
     var_names = [c for c in ["score", "z_score", "p_value", "q_value"] if c in df.columns]
     var = pd.DataFrame(index=var_names)
-    X = np.zeros((len(obs), len(var.index)), dtype=float) if len(var.index) else np.zeros((len(obs), 0))
+    X = (
+        np.zeros((len(obs), len(var.index)), dtype=float)
+        if len(var.index)
+        else np.zeros((len(obs), 0))
+    )
     for j, col in enumerate(var.index):
         X[:, j] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).to_numpy()
     if obs_metadata:

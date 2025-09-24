@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import platform
 import subprocess
 from pathlib import Path
-import logging
 from typing import List, Optional
 
 import pandas as pd
@@ -51,8 +51,9 @@ def validate_h5ad(
     backed: bool = typer.Option(False, help="Use AnnData backed mode for large files"),
 ) -> None:
     """Validate .h5ad gene symbols and overlap with expected library genes."""
-    import anndata as ad
     import re
+
+    import anndata as ad
 
     adata = ad.read_h5ad(h5ad, backed="r" if backed else None)
     var = adata.var
@@ -100,7 +101,9 @@ def validate_h5ad(
     # obs hints
     obs_cols = list(adata.obs.columns)
     cluster_keys = [k for k in obs_cols if k.lower() in {"leiden","louvain","cluster","clusters"}]
-    pseudo_keys = [k for k in obs_cols if any(s in k.lower() for s in ["sample","donor","patient","dataset_id"]) ]
+    pseudo_keys = [
+        k for k in obs_cols if any(s in k.lower() for s in ["sample", "donor", "patient", "dataset_id"])  # noqa: E501
+    ]
     typer.echo(f"cluster candidates: {cluster_keys}")
     typer.echo(f"pseudobulk candidates: {pseudo_keys}")
 
@@ -676,13 +679,16 @@ def score(
     if json_output:
         Path(json_output).parent.mkdir(parents=True, exist_ok=True)
         # Compose metadata similar to UI
+        blend_val = (
+            float(res.metadata.get("blend", blend)) if hasattr(res, "metadata") else float(blend)
+        )
         meta = {
             "library": str(library),
             "n": int(len(out_df)),
             "method": method,
             "top_k": int(top_k),
             "auto_blend": bool(auto_blend),
-            "blend": float(res.metadata.get("blend", blend)) if hasattr(res, "metadata") else float(blend),
+            "blend": blend_val,
             "model_path": model_path,
         }
         payload = {"results": out_df.to_dict(orient="records"), "meta": meta}
