@@ -80,6 +80,7 @@ def ensure_session_defaults() -> None:
     st.session_state.setdefault("cell_line_filter", "All")
     st.session_state.setdefault("active_preset", None)
     st.session_state.setdefault("session_metadata", {})
+    st.session_state.setdefault("_bookmark_consumed", False)
 
 
 @st.cache_data(show_spinner=False)
@@ -108,6 +109,285 @@ def encode_state_token(payload: Dict[str, Any]) -> str:
 def decode_state_token(token: str) -> Dict[str, Any]:
     data = base64.urlsafe_b64decode(token.encode("utf-8"))
     return json.loads(data.decode("utf-8"))
+
+
+def handle_bookmark_on_load() -> None:
+    params = st.experimental_get_query_params()
+    tokens = params.get(BOOKMARK_PARAM)
+    if not tokens:
+        return
+    if st.session_state.get("_bookmark_consumed", False):
+        return
+    token = tokens[0]
+    try:
+        payload = decode_state_token(token)
+        payload["source"] = "bookmark"
+        apply_state_payload(payload, include_results=False)
+        st.session_state["_bookmark_consumed"] = True
+        st.experimental_rerun()
+    except Exception as exc:  # pragma: no cover - defensive UI path
+        st.session_state["_bookmark_consumed"] = True
+        st.sidebar.warning(f"Failed to load bookmark: {exc}")
+
+
+def apply_state_payload(payload: Dict[str, Any], *, include_results: bool) -> None:
+    if not isinstance(payload, dict):
+        raise ValueError("State payload must be a dictionary.")
+    ensure_session_defaults()
+
+    library_path = payload.get("library_path")
+    if library_path:
+        st.session_state["library_path"] = str(library_path)
+
+    method = payload.get("method")
+    if method in {"baseline", "metric"}:
+        st.session_state["method"] = method
+
+    top_k = payload.get("top_k")
+    if top_k is not None:
+        st.session_state["top_k"] = int(top_k)
+
+    blend = payload.get("blend")
+    if blend is not None:
+        st.session_state["blend"] = float(blend)
+
+    cell_filter = payload.get("cell_line_filter")
+    if cell_filter is None or cell_filter == "All":
+        st.session_state["cell_line_filter"] = "All"
+    elif isinstance(cell_filter, str):
+        st.session_state["cell_line_filter"] = cell_filter
+
+    target_context = payload.get("target_context") or {}
+    st.session_state["target_context"] = target_context
+    st.session_state["target_mode"] = target_context.get(
+        "mode",
+        st.session_state.get("target_mode", "Demo"),
+    )
+    st.session_state["active_preset"] = target_context.get("preset")
+
+    gene_lists = target_context.get("gene_lists") or {}
+    up_block = "\n".join(gene_lists.get("up_genes", []))
+    down_block = "\n".join(gene_lists.get("down_genes", []))
+    if up_block:
+        st.session_state["up_genes_text"] = up_block
+    if down_block:
+        st.session_state["down_genes_text"] = down_block
+
+    if target_context.get("cluster_key"):
+        st.session_state["target_cluster_key"] = target_context["cluster_key"]
+    if target_context.get("cluster"):
+        st.session_state["target_cluster_label"] = target_context["cluster"]
+    if target_context.get("reference_mode"):
+        st.session_state["target_reference_mode"] = target_context["reference_mode"]
+    if target_context.get("reference_cluster"):
+        st.session_state["target_reference_cluster"] = target_context["reference_cluster"]
+    if target_context.get("differential_method"):
+        st.session_state["target_cluster_method"] = target_context["differential_method"]
+
+    target_signature = payload.get("target_signature")
+    if target_signature:
+        st.session_state["target_signature"] = target_signature
+
+    model_checkpoint = payload.get("model_checkpoint")
+    if isinstance(model_checkpoint, dict):
+        st.session_state["model_checkpoint_label"] = model_checkpoint.get("label")
+        st.session_state["model_checkpoint_path"] = model_checkpoint.get("path")
+    elif isinstance(model_checkpoint, str):
+        st.session_state["model_checkpoint_label"] = model_checkpoint
+
+    if include_results and payload.get("results") is not None:
+        try:
+            st.session_state["results_df"] = pd.DataFrame(payload["results"])
+        except Exception:
+            pass
+
+    st.session_state.setdefault("session_metadata", {})
+    st.session_state["session_metadata"]["restored_from"] = payload.get("source", "bookmark")
+
+
+def prepare_link_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    if df is None or df.empty:
+        return df, {}
+    table_df = df.copy()
+    column_config: Dict[str, Any] = {}
+    for col in list(table_df.columns):
+        template_key = col.lower()
+        if template_key not in EXTERNAL_ID_LINKS:
+            continue
+        info = EXTERNAL_ID_LINKS[template_key]
+        label = info["label"]
+        url_template = info["url_template"]
+        display_regex = info.get("display_regex")
+        help_text = info.get("help")
+        insert_idx = table_df.columns.get_loc(col)
+        new_key = label if label not in table_df.columns else f"{label} link"
+
+        def _to_url(value: Any) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, float) and np.isnan(value):
+                return ""
+            text = str(value).strip()
+            if not text or text.lower() == "nan":
+                return ""
+            return url_template.format(id=text)
+
+        table_df.insert(insert_idx, new_key, table_df[col].map(_to_url))
+        table_df = table_df.drop(columns=[col])
+        column_config[new_key] = st.column_config.LinkColumn(
+            label,
+            help=help_text,
+            display_text=display_regex,
+        )
+
+    return table_df, column_config
+
+
+def flatten_metadata(prefix: str, value: Any, collector: List[Tuple[str, Any]]) -> None:
+    if isinstance(value, dict):
+        for key, val in value.items():
+            next_prefix = f"{prefix}.{key}" if prefix else str(key)
+            flatten_metadata(next_prefix, val, collector)
+    else:
+        collector.append((prefix, value))
+
+
+def build_export_metadata(
+    target_sig: TargetSignature,
+    target_context: Dict[str, Any],
+    method: str,
+    top_k: int,
+    blend: Optional[float],
+    cell_line: Optional[str],
+    library_path: str,
+    model_label: Optional[str],
+    model_path: Optional[str],
+    scoring_meta: Dict[str, Any],
+) -> Dict[str, Any]:
+    qc_summary = {}
+    if isinstance(target_sig.metadata, dict):
+        qc_summary = target_sig.metadata.get("qc_summary", {})
+    target_source = target_sig.metadata.get("source", target_context) if isinstance(
+        target_sig.metadata, dict
+    ) else target_context
+
+    up_count = sum(1 for w in target_sig.weights if w > 0)
+    down_count = sum(1 for w in target_sig.weights if w < 0)
+
+    metadata: Dict[str, Any] = {
+        "version": SESSION_VERSION,
+        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "library_path": library_path,
+        "method": method,
+        "top_k": int(top_k),
+        "cell_line_filter": cell_line or "All",
+        "target": {
+            "mode": target_source.get("mode"),
+            "preset": target_source.get("preset"),
+            "n_genes": len(target_sig.genes),
+            "n_up": int(up_count),
+            "n_down": int(down_count),
+            "summary": qc_summary,
+        },
+    }
+
+    gene_lists = target_source.get("gene_lists") if isinstance(target_source, dict) else None
+    if gene_lists:
+        metadata["target"]["gene_lists"] = gene_lists
+
+    if method == "metric" and blend is not None:
+        metadata["blend"] = float(blend)
+
+    if model_label or model_path:
+        metadata["model_checkpoint"] = {"label": model_label, "path": model_path}
+
+    if scoring_meta:
+        metadata["scoring"] = scoring_meta
+
+    return metadata
+
+
+def metadata_to_header_lines(metadata: Dict[str, Any]) -> List[str]:
+    flattened: List[Tuple[str, Any]] = []
+    flatten_metadata("metadata", metadata, flattened)
+    lines = ["# scPerturb-CMap export"]
+    for key, value in flattened:
+        if isinstance(value, (dict, list)):
+            encoded = json.dumps(value, ensure_ascii=True)
+        else:
+            encoded = str(value)
+        lines.append(f"# {key}: {encoded}")
+    return lines
+
+
+def build_session_payload(
+    target_sig: TargetSignature,
+    target_context: Dict[str, Any],
+    method: str,
+    top_k: int,
+    blend: Optional[float],
+    cell_line: Optional[str],
+    library_path: str,
+    model_label: Optional[str],
+    model_path: Optional[str],
+    scoring_meta: Dict[str, Any],
+    ranking_df: Optional[pd.DataFrame],
+    export_metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "version": SESSION_VERSION,
+        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "library_path": library_path,
+        "method": method,
+        "top_k": int(top_k),
+        "blend": (float(blend) if blend is not None else None),
+        "cell_line_filter": cell_line,
+        "model_checkpoint": (
+            {"label": model_label, "path": model_path}
+            if (model_label or model_path)
+            else None
+        ),
+        "target_context": target_context,
+        "target_signature": target_sig.model_dump(),
+        "scoring_metadata": scoring_meta,
+        "export_metadata": export_metadata,
+    }
+    if payload["model_checkpoint"] is None:
+        payload.pop("model_checkpoint")
+
+    if ranking_df is not None and not ranking_df.empty:
+        session_df = ranking_df.head(MAX_SESSION_RESULTS).copy()
+        session_records = session_df.where(pd.notna(session_df), None).to_dict(orient="records")
+        payload["results"] = session_records
+        payload["results_columns"] = list(session_df.columns)
+        payload["result_count"] = int(len(ranking_df))
+
+    return payload
+
+
+def build_export_files(
+    ranking_df: pd.DataFrame,
+    metadata: Dict[str, Any],
+) -> Tuple[bytes, bytes]:
+    df_export = ranking_df.copy()
+    # Replace NaNs in non-numeric columns for stable export
+    for col in df_export.columns:
+        if df_export[col].dtype.kind not in {"i", "u", "f"}:
+            df_export[col] = df_export[col].astype(object).where(pd.notna(df_export[col]), "")
+
+    header_lines = metadata_to_header_lines(metadata)
+    csv_buffer = io.StringIO()
+    for line in header_lines:
+        csv_buffer.write(line + "\n")
+    df_export.to_csv(csv_buffer, index=False)
+    csv_bytes = csv_buffer.getvalue().encode("utf-8")
+
+    json_payload = {
+        "metadata": metadata,
+        "results": df_export.where(pd.notna(df_export), None).to_dict(orient="records"),
+    }
+    json_bytes = json.dumps(json_payload, indent=2).encode("utf-8")
+    return csv_bytes, json_bytes
 
 # Allow passing a default LINCS path via CLI arg `--lincs <path>` or env `SCPC_LINCS`.
 try:
@@ -176,97 +456,189 @@ def sidebar_controls(
     Optional[float],
     Optional[str],
     str,
+    Dict[str, Any],
+    Optional[str],
 ]:
     st.sidebar.header("Data & Target")
-    # Allow specifying a LINCS long file path; default to examples/data/lincs_demo.parquet
-    default_path = st.session_state.get("demo_lincs_path", "examples/data/lincs_demo.parquet")
-    lincs_path = st.sidebar.text_input("LINCS long file (parquet/csv)", value=default_path)
-    # Target source
+    lincs_path_input = st.sidebar.text_input(
+        "LINCS long file (parquet/csv)",
+        key="library_path",
+    )
+    lincs_path = lincs_path_input.strip() if lincs_path_input else ""
+    library_df = lincs_long
+    if lincs_path:
+        target_file = Path(lincs_path)
+        if target_file.exists():
+            try:
+                library_df = load_library_from_path(str(target_file))
+            except Exception as exc:  # pragma: no cover - UI feedback
+                st.sidebar.error(f"Failed to load {target_file.name}: {exc}")
+        else:
+            st.sidebar.warning(
+                "Specified library path does not exist; falling back to demo dataset."
+            )
+
     target_mode = st.sidebar.radio(
         "Target source",
-        ["Demo", "+ Gene lists", "+ .h5ad"]
+        ["Demo", "+ Gene lists", "+ .h5ad"],
+        key="target_mode",
     )
 
-    # Build target
+    target_context: Dict[str, Any] = {"mode": target_mode, "preset": st.session_state.get("active_preset")}
+
     if target_mode == "+ Gene lists":
-        up_text = st.sidebar.text_area("Up genes (one per line)", "G1\nG2\nG3")
-        down_text = st.sidebar.text_area("Down genes (one per line)", "G10\nG11")
-        up_genes = [g.strip() for g in up_text.splitlines() if g.strip()]
-        down_genes = [g.strip() for g in down_text.splitlines() if g.strip()]
+        up_text = st.sidebar.text_area("Up genes (one per line)", key="up_genes_text")
+        down_text = st.sidebar.text_area("Down genes (one per line)", key="down_genes_text")
+        up_genes = parse_gene_block(up_text)
+        down_genes = parse_gene_block(down_text)
         target_sig = target_from_gene_lists(up_genes, down_genes)
+        target_context["gene_lists"] = {"up_genes": up_genes, "down_genes": down_genes}
     elif target_mode == "+ .h5ad":
-        h5ad_file = st.sidebar.file_uploader("Upload .h5ad", type=["h5ad"]) 
+        h5ad_file = st.sidebar.file_uploader("Upload .h5ad", type=["h5ad"], key="target_h5ad_file")
         adata = read_uploaded_h5ad(h5ad_file)
         if adata is None:
             st.sidebar.info("Upload an .h5ad file to build a target signature.")
-            # Default small target
-            target_sig = target_from_gene_lists(["G1", "G2"], ["G10"]) 
+            target_sig = target_from_gene_lists(["G1", "G2"], ["G10"])
+            target_context["note"] = "Awaiting h5ad upload"
         else:
-            cluster_key = st.sidebar.selectbox("Cluster key", sorted(list(adata.obs.columns)))
+            obs_keys = sorted(list(map(str, adata.obs.columns)))
+            st.session_state.setdefault("target_cluster_key", obs_keys[0] if obs_keys else "")
+            cluster_key = st.sidebar.selectbox(
+                "Cluster key",
+                obs_keys,
+                key="target_cluster_key",
+            )
             labels = adata.obs[cluster_key].astype(str)
-            cluster = st.sidebar.selectbox("Cluster", sorted(labels.unique().tolist()))
-            ref_mode = st.sidebar.radio("Reference", ["rest", "cluster"])
+            cluster_options = sorted(labels.unique().tolist())
+            st.session_state.setdefault("target_cluster_label", cluster_options[0] if cluster_options else "")
+            cluster = st.sidebar.selectbox(
+                "Cluster",
+                cluster_options,
+                key="target_cluster_label",
+            )
+            ref_mode = st.sidebar.radio("Reference", ["rest", "cluster"], key="target_reference_mode")
             reference = "rest"
+            ref_cluster = None
             if ref_mode == "cluster":
-                ref_label = st.sidebar.selectbox(
-                    "Reference cluster", sorted(labels.unique().tolist())
+                st.session_state.setdefault(
+                    "target_reference_cluster",
+                    cluster_options[0] if cluster_options else "",
                 )
-                reference = str(ref_label)
-            method = st.sidebar.selectbox("Method", ["rank_biserial", "logfc"]) 
+                ref_cluster = st.sidebar.selectbox(
+                    "Reference cluster",
+                    cluster_options,
+                    key="target_reference_cluster",
+                )
+                reference = str(ref_cluster)
+            st.session_state.setdefault("target_cluster_method", "rank_biserial")
+            diff_method = st.sidebar.selectbox(
+                "Method",
+                ["rank_biserial", "logfc"],
+                key="target_cluster_method",
+            )
+            target_context.update(
+                {
+                    "cluster_key": cluster_key,
+                    "cluster": str(cluster),
+                    "reference_mode": ref_mode,
+                    "reference_cluster": (str(ref_cluster) if ref_cluster else None),
+                    "differential_method": diff_method,
+                }
+            )
             target_sig = target_from_cluster(
                 adata,
                 cluster_key=cluster_key,
                 cluster=str(cluster),
                 reference=reference,
-                method=method,
+                method=diff_method,
             )
     else:
-        # Demo: simple up/down lists overlapping custom demo library
-        target_sig = target_from_gene_lists(["G1", "G2", "G3"], ["G10", "G11"]) 
+        default_up = parse_gene_block(DEFAULT_UP_TEXT)
+        default_down = parse_gene_block(DEFAULT_DOWN_TEXT)
+        target_sig = target_from_gene_lists(default_up, default_down)
+        target_context["gene_lists"] = {"up_genes": default_up, "down_genes": default_down}
 
     lib_genes = (
-        lincs_long["gene_symbol"].astype(str).unique().tolist()
-        if "gene_symbol" in lincs_long.columns
+        library_df["gene_symbol"].astype(str).unique().tolist()
+        if "gene_symbol" in library_df.columns
         else None
     )
     qc_summary = summarize_target_signature(target_sig, library_genes=lib_genes)
-    target_sig.metadata = {**target_sig.metadata, "qc_summary": qc_summary}
+    target_sig.metadata = {
+        **target_sig.metadata,
+        "qc_summary": qc_summary,
+        "source": target_context,
+    }
+    st.session_state["target_signature"] = target_sig.model_dump()
+    st.session_state["target_context"] = target_context
 
     st.sidebar.header("Scoring")
-    method = st.sidebar.selectbox("Method", ["baseline", "metric"]) 
-    top_k = int(st.sidebar.slider("Top K", min_value=10, max_value=200, value=50, step=10))
-    blend = float(st.sidebar.slider("Blend (metric)", 0.0, 1.0, 0.5))
-    model_file = None
+    method = st.sidebar.selectbox("Method", ["baseline", "metric"], key="method")
+    top_k = int(
+        st.sidebar.slider(
+            "Top K",
+            min_value=10,
+            max_value=200,
+            value=int(st.session_state.get("top_k", 50)),
+            step=10,
+            key="top_k",
+        )
+    )
+    blend_value = float(
+        st.sidebar.slider(
+            "Blend (metric)",
+            min_value=0.0,
+            max_value=1.0,
+            value=float(st.session_state.get("blend", 0.5)),
+            step=0.05,
+            key="blend",
+            disabled=(method != "metric"),
+        )
+    )
+    model_file: Optional[str] = None
+    model_label: Optional[str] = None
     if method == "metric":
-        model_upload = st.sidebar.file_uploader("Checkpoint (.pt)", type=["pt"]) 
+        model_upload = st.sidebar.file_uploader("Checkpoint (.pt)", type=["pt"], key="model_upload")
         if model_upload is not None:
             buf = io.BytesIO(model_upload.read())
             with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as tmp:
                 tmp.write(buf.getvalue())
                 tmp.flush()
                 model_file = tmp.name
+                model_label = getattr(model_upload, "name", os.path.basename(model_file))
+            st.session_state["model_checkpoint_path"] = model_file
+            st.session_state["model_checkpoint_label"] = model_label
         else:
-            st.sidebar.warning("Upload a checkpoint to use metric method.")
+            model_file = st.session_state.get("model_checkpoint_path")
+            model_label = st.session_state.get("model_checkpoint_label")
+            if not model_file:
+                st.sidebar.warning("Upload a checkpoint to use the metric method.")
+    else:
+        st.session_state.pop("model_checkpoint_path", None)
+        st.session_state.pop("model_checkpoint_label", None)
 
     st.sidebar.header("Filter")
-    cln = None
-    if "cell_line" in lincs_long.columns:
-        cln = st.sidebar.selectbox(
+    cln: Optional[str] = None
+    if "cell_line" in library_df.columns:
+        options = sorted(library_df["cell_line"].astype(str).unique().tolist())
+        raw_choice = st.sidebar.selectbox(
             "Cell line (optional)",
-            ["All"] + sorted(lincs_long["cell_line"].astype(str).unique().tolist()),
+            ["All"] + options,
+            key="cell_line_filter",
         )
-        if cln == "All":
-            cln = None
+        cln = None if raw_choice == "All" else str(raw_choice)
 
     return (
         target_sig,
-        lincs_long,
+        library_df,
         method,
         top_k,
         model_file,
-        (None if method != "metric" else float(blend)),
+        (None if method != "metric" else float(blend_value)),
         cln,
         lincs_path,
+        target_context,
+        model_label,
     )
 
 
