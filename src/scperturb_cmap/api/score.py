@@ -161,8 +161,12 @@ def rank_drugs(
     overlap = len(set(t_genes) & set(lib_genes))
     if len(t_genes) >= 300 and overlap < 150:
         missing = [g for g in t_genes if g not in set(lib_genes)][:10]
+        hint = (
+            "Insufficient gene overlap. Consider mapping symbols (validate-h5ad), "
+            "supplying --library-genes to make-target for QC, or restricting to L1000 landmarks."
+        )
         raise ValueError(
-            f"Insufficient gene overlap: {overlap} < 150. Example missing target genes: {missing}"
+            f"Insufficient gene overlap: {overlap} < 150. Example missing target genes: {missing}. {hint}"
         )
 
     # Baseline ensemble (lower is better)

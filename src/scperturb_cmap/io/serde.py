@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 import pandas as pd
 
@@ -34,3 +34,26 @@ def load_parquet_dataset_filtered(
     scanner = dataset.scanner(filter=filter_expr, columns=list(columns) if columns else None)
     table = scanner.to_table()
     return table.to_pandas()
+
+
+def results_to_cellxgene(df: pd.DataFrame, *, obs_metadata: Dict[str, Any] | None = None):
+    """Export ranked results into a minimal AnnData for cellxgene-like viewers.
+
+    Creates a tiny variable space (score columns) and places rows as obs.
+    """
+    try:
+        import anndata as ad  # type: ignore
+        import numpy as np
+    except Exception as e:  # pragma: no cover - optional
+        raise RuntimeError("AnnData is required for cellxgene export") from e
+
+    obs = df.copy()
+    var_names = [c for c in ["score", "z_score", "p_value", "q_value"] if c in df.columns]
+    var = pd.DataFrame(index=var_names)
+    X = np.zeros((len(obs), len(var.index)), dtype=float) if len(var.index) else np.zeros((len(obs), 0))
+    for j, col in enumerate(var.index):
+        X[:, j] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).to_numpy()
+    if obs_metadata:
+        for k, v in obs_metadata.items():
+            obs[k] = v
+    return ad.AnnData(X=X, obs=obs, var=pd.DataFrame(index=var.index))

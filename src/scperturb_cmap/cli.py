@@ -348,7 +348,13 @@ def score(
     model_path: Optional[str] = typer.Option(None, help="Checkpoint for metric method"),
     top_k: int = typer.Option(50, help="Top-k rows to return"),
     blend: float = typer.Option(0.5, help="Blend weight for metric"),
+    auto_blend: bool = typer.Option(
+        False, help="Automatically tune blend between baseline and metric"
+    ),
     output: Optional[str] = typer.Option(None, help="Optional output Parquet path"),
+    json_output: Optional[str] = typer.Option(
+        None, help="Optional output JSON path (includes metadata)"
+    ),
     cell_line: Optional[str] = typer.Option(
         None,
         help="Optional cell line filter to reduce library size",
@@ -634,7 +640,15 @@ def score(
     if collapse_replicates and "replicate_id" in df_long.columns:
         df_long = collapse_replicates_modz(df_long)
 
-    res = rank_drugs(ts, df_long, method=method, model_path=model_path, top_k=top_k, blend=blend)
+    res = rank_drugs(
+        ts,
+        df_long,
+        method=method,
+        model_path=model_path,
+        top_k=top_k,
+        blend=blend,
+        auto_blend=auto_blend,
+    )
     out_df = pd.DataFrame(res.model_dump()["ranking"])  # serialized as list-of-dicts
     # Optional FDR q-values (per query) using Benjamini–Hochberg
     try:
@@ -658,6 +672,22 @@ def score(
         typer.echo(f"Wrote results -> {output}")
     else:
         typer.echo(out_df.to_string(index=False))
+
+    if json_output:
+        Path(json_output).parent.mkdir(parents=True, exist_ok=True)
+        # Compose metadata similar to UI
+        meta = {
+            "library": str(library),
+            "n": int(len(out_df)),
+            "method": method,
+            "top_k": int(top_k),
+            "auto_blend": bool(auto_blend),
+            "blend": float(res.metadata.get("blend", blend)) if hasattr(res, "metadata") else float(blend),
+            "model_path": model_path,
+        }
+        payload = {"results": out_df.to_dict(orient="records"), "meta": meta}
+        Path(json_output).write_text(json.dumps(payload, indent=2))
+        typer.echo(f"Wrote JSON -> {json_output}")
 
 
 @app.command("train")
