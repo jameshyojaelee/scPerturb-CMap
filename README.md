@@ -1,18 +1,24 @@
 # scPerturb-CMap
 
-_A single-cell connectivity mapping toolkit for drug repurposing._
+_From single-cell disease signatures to ranked drug repurposing hypotheses—within hours._
 
-Modern translational projects need actionable drug hypotheses quickly. Bulk connectivity mapping jump‑started the field, but it averages away rare states (e.g., IFN‑high myeloid, EMT‑like tumor cells, exhausted T cells) that often drive disease and therapy response. scPerturb‑CMap brings connectivity mapping to single‑cell resolution so you can prioritise compounds that invert the exact pathological programs you care about, not just tissue averages.
+The Broad Connectivity Map (LINCS L1000) captures millions of empirically measured drug responses. scPerturb-CMap is the bridge that lets single-cell researchers mine that atlas without rebuilding perturbation screens from scratch. Starting with a troublesome or rare cell population (e.g., EMT-like tumor cells, IFN-high macrophages, exhausted T cells), you derive a gene signature and immediately query the L1000 treasury for compounds proven to push cells in the opposite direction. In place of months-long screening campaigns, you generate ordered, testable drug hypotheses the same day—complete with effect sizes, z-scores, p-values, QC stats, and mechanism-of-action enrichments.
 
-At its core, scPerturb‑CMap takes a target signature—built from scRNA‑seq `.h5ad` cohorts (by cluster or selected cells) or from curated up/down gene lists—and scores it against LINCS L1000 (or your own long‑form libraries). It returns ranked drugs with interpretable context: a connectivity score (lower = stronger predicted inversion), z‑scores and two‑sided p‑values, QC on gene overlap/balance, and MOA enrichment among top hits. It’s fast (minutes on laptops; seconds on clusters with Arrow predicate pushdown), reproducible (typed schemas, tests, acceptance gates), and easy to adopt (CLI, Python API, Streamlit UI).
+Why translational teams rely on scPerturb-CMap:
+1. **Targets the “undruggable.”** Rare states no longer disappear in bulk averages; ranking is driven by the exact cluster causing pathology.
+2. **Leverages a decade of data.** Mine the public L1000 archive instead of funding bespoke single-cell perturbation experiments.
+3. **Accelerates repurposing.** Connect patient-derived or experimental signatures to approved/investigational compounds with immediate readouts for bench validation.
+4. **Democratises analysis.** Fits existing workflows (AnnData `.h5ad`, curated gene lists, LINCS Parquet), and ships with CLI, Python API, and Streamlit UI for mixed computational/experimental teams.
 
-Who is this for? Computational biologists, translational scientists, and platform teams who need a pragmatic bridge from single‑cell disease signatures to testable small‑molecule hypotheses.
+#### How scPerturb-CMap differs from scGen / scPerturb
 
-Why this matters:
-- Single‑cell specificity: avoids bulk averaging so rare states drive ranking.
-- Interpretability: z‑scores, p‑values, QC summaries, and MOA enrichment built‑in.
-- Practical speed & scale: replicate collapsing and partitioned Parquet handle millions of rows.
-- Production hygiene: typed data contracts, unit tests, and acceptance checks keep runs reliable.
+| Feature | **scGen / scPerturb** | **scPerturb-CMap** |
+| :-- | :-- | :-- |
+| Primary question | *“If I apply perturbation X, what will my single-cell transcriptomes look like?”* | *“Given this disease signature, which known compounds have been observed to reverse it?”* |
+| Core capability | Learns perturbation rules within a reference single-cell dataset and predicts new responses. | Searches the external LINCS L1000 atlas to retrieve real perturbations ranked by inversion strength. |
+| Required inputs | A single-cell experiment that already contains the perturbation of interest (treated vs control). | A target signature from scRNA-seq (`.h5ad`) or curated up/down gene lists; optional custom LINCS-style libraries. |
+| Outputs | Simulated single-cell expression profiles under hypothetical perturbations. | Ranked list of real compounds with connectivity scores, z/p statistics, QC metrics, and MOA enrichment. |
+| Analogy | **Flight simulator** – models how a plane behaves under new conditions. | **Flight search engine** – scans all existing routes to find the optimal therapeutic “flight” toward reversal. |
 
 The package ships with:
 
