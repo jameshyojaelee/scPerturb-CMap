@@ -45,4 +45,4 @@ artifacts/**
 *.log
 *.pyc
 __pycache__/
-250924 prompts
+250924 prompts.md
