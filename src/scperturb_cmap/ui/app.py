@@ -218,9 +218,10 @@ def main():
 
     # Presets
     st.sidebar.markdown("### Presets")
-    col_a, col_b = st.sidebar.columns(2)
+    col_a, col_b, col_c = st.sidebar.columns(3)
     emt_clicked = col_a.button("EMT reversal demo")
     ifng_clicked = col_b.button("IFN-high demo")
+    tex_clicked = col_c.button("T-cell exhaustion")
 
     def _load_demo_sets(path: str = "examples/data/demo_gene_sets.json"):
         if os.path.exists(path):
@@ -231,6 +232,8 @@ def main():
             "EMT_DN": ["EPCAM", "KRT8", "KRT18", "OCLN", "CLDN4"],
             "IFNG_UP": ["STAT1", "IRF1", "CXCL10", "HLA-A", "ISG15"],
             "IFNG_DN": [],
+            "TEX_UP": ["PDCD1", "LAG3", "HAVCR2", "CTLA4", "TIGIT"],
+            "TEX_DN": [],
         }
 
     def _score_from_gene_lists(up, dn, library, method: str = "baseline", top_k: int = 50):
@@ -252,15 +255,17 @@ def main():
         )
         return ts, df_rank
 
-    if emt_clicked or ifng_clicked:
+    if emt_clicked or ifng_clicked or tex_clicked:
         gs = _load_demo_sets()
         library_obj = (
             load_lincs_long(str(lincs_path)) if os.path.exists(str(lincs_path)) else lincs_long
         )
         if emt_clicked:
             up, dn = gs.get("EMT_UP", []), gs.get("EMT_DN", [])
-        else:
+        elif ifng_clicked:
             up, dn = gs.get("IFNG_UP", []), gs.get("IFNG_DN", [])
+        else:
+            up, dn = gs.get("TEX_UP", []), gs.get("TEX_DN", [])
         with st.spinner("Scoring preset against drug library..."):
             ts_preset, df_rank = _score_from_gene_lists(
                 up,
@@ -367,9 +372,17 @@ def main():
                 mime="text/csv",
                 use_container_width=True,
             )
+            import datetime as _dt
             results_json = {
                 "results": df_export.to_dict(orient="records"),
-                "meta": {"library": str(lincs_path), "n": int(len(df_export))},
+                "meta": {
+                    "library": str(lincs_path),
+                    "n": int(len(df_export)),
+                    "method": method,
+                    "top_k": int(top_k),
+                    "cell_line_filter": cln if cln else None,
+                    "generated_at": _dt.datetime.utcnow().isoformat() + "Z",
+                },
             }
             dl_col2.download_button(
                 "Download JSON",
