@@ -2,7 +2,19 @@
 
 _A single-cell connectivity mapping toolkit for drug repurposing._
 
-scPerturb-CMap scores small-molecule perturbations against disease signatures derived from single-cell RNA-seq or curated gene lists, helping biologists turn troublesome cell states into prioritised drug hypotheses within hours. It plugs into common omics workflows—AnnData `.h5ad` files (the standard container for single-cell matrices), simple up/down gene lists, and LINCS Level 5 drug-response profiles—and outputs interpretable statistics: z-scores (how strongly a drug inverts the signature relative to others), p-values (significance under a null model), QC summaries (gene overlap, balance of up/down genes), and MOA enrichments (mechanisms-of-action overrepresented among top compounds). The package ships with:
+Modern translational projects need actionable drug hypotheses quickly. Bulk connectivity mapping jump‑started the field, but it averages away rare states (e.g., IFN‑high myeloid, EMT‑like tumor cells, exhausted T cells) that often drive disease and therapy response. scPerturb‑CMap brings connectivity mapping to single‑cell resolution so you can prioritise compounds that invert the exact pathological programs you care about, not just tissue averages.
+
+At its core, scPerturb‑CMap takes a target signature—built from scRNA‑seq `.h5ad` cohorts (by cluster or selected cells) or from curated up/down gene lists—and scores it against LINCS L1000 (or your own long‑form libraries). It returns ranked drugs with interpretable context: a connectivity score (lower = stronger predicted inversion), z‑scores and two‑sided p‑values, QC on gene overlap/balance, and MOA enrichment among top hits. It’s fast (minutes on laptops; seconds on clusters with Arrow predicate pushdown), reproducible (typed schemas, tests, acceptance gates), and easy to adopt (CLI, Python API, Streamlit UI).
+
+Who is this for? Computational biologists, translational scientists, and platform teams who need a pragmatic bridge from single‑cell disease signatures to testable small‑molecule hypotheses.
+
+Why this matters:
+- Single‑cell specificity: avoids bulk averaging so rare states drive ranking.
+- Interpretability: z‑scores, p‑values, QC summaries, and MOA enrichment built‑in.
+- Practical speed & scale: replicate collapsing and partitioned Parquet handle millions of rows.
+- Production hygiene: typed data contracts, unit tests, and acceptance checks keep runs reliable.
+
+The package ships with:
 
 - a fast baseline (cosine + GSEA ensemble) that emits z-scores and p-values,
 - a DualEncoder metric model that can be trained on real inversion pairs,
