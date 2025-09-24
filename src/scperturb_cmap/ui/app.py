@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
 import io
 import json
 import os
 import sys
 import tempfile
-from typing import Optional, Tuple
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -28,6 +31,83 @@ from scperturb_cmap.viz.plots import (
 )
 
 st.set_page_config(page_title="scPerturb-CMap Demo", layout="wide")
+
+UI_PRESETS_PATH = Path("examples/data/ui_presets.json")
+BOOKMARK_PARAM = "bookmark"
+SESSION_VERSION = 1
+DEFAULT_UP_TEXT = "G1\nG2\nG3"
+DEFAULT_DOWN_TEXT = "G10\nG11"
+MAX_SESSION_RESULTS = 250
+
+EXTERNAL_ID_LINKS: Dict[str, Dict[str, str]] = {
+    "chembl_id": {
+        "label": "ChEMBL",
+        "url_template": "https://www.ebi.ac.uk/chembl/compound_report_card/{id}/",
+        "display_regex": r"https://www\\.ebi\\.ac\\.uk/chembl/compound_report_card/(CHEMBL[0-9A-Z]+)/",
+        "help": "Open compound in the ChEMBL browser.",
+    },
+    "drugbank_id": {
+        "label": "DrugBank",
+        "url_template": "https://go.drugbank.com/drugs/{id}",
+        "display_regex": r"https://go\\.drugbank\\.com/drugs/(DB\\d+)",
+        "help": "Open compound entry on DrugBank.",
+    },
+    "pubchem_cid": {
+        "label": "PubChem",
+        "url_template": "https://pubchem.ncbi.nlm.nih.gov/compound/{id}",
+        "display_regex": r"https://pubchem\\.ncbi\\.nlm\\.nih\\.gov/compound/(\\d+)",
+        "help": "Open compound entry on PubChem.",
+    },
+    "chebi_id": {
+        "label": "ChEBI",
+        "url_template": "https://www.ebi.ac.uk/chebi/searchId.do?chebiId={id}",
+        "display_regex": r"https://www\\.ebi\\.ac\\.uk/chebi/searchId\\.do\\?chebiId=(CHEBI:\\d+)",
+        "help": "Open metabolite entry on ChEBI.",
+    },
+}
+
+
+def ensure_session_defaults() -> None:
+    default_path = st.session_state.get("demo_lincs_path", "examples/data/lincs_demo.parquet")
+    if "library_path" not in st.session_state:
+        st.session_state["library_path"] = default_path
+    st.session_state.setdefault("target_mode", "Demo")
+    st.session_state.setdefault("up_genes_text", DEFAULT_UP_TEXT)
+    st.session_state.setdefault("down_genes_text", DEFAULT_DOWN_TEXT)
+    st.session_state.setdefault("method", "baseline")
+    st.session_state.setdefault("top_k", 50)
+    st.session_state.setdefault("blend", 0.5)
+    st.session_state.setdefault("cell_line_filter", "All")
+    st.session_state.setdefault("active_preset", None)
+    st.session_state.setdefault("session_metadata", {})
+
+
+@st.cache_data(show_spinner=False)
+def load_ui_presets(path: str | Path = UI_PRESETS_PATH) -> Dict[str, Dict[str, Any]]:
+    target_path = Path(path)
+    if not target_path.exists():
+        return {}
+    with target_path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("Preset JSON must be an object mapping names to gene sets.")
+    return payload
+
+
+def parse_gene_block(text: str) -> List[str]:
+    if not text:
+        return []
+    return [gene.strip() for gene in text.splitlines() if gene.strip()]
+
+
+def encode_state_token(payload: Dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("utf-8")
+
+
+def decode_state_token(token: str) -> Dict[str, Any]:
+    data = base64.urlsafe_b64decode(token.encode("utf-8"))
+    return json.loads(data.decode("utf-8"))
 
 # Allow passing a default LINCS path via CLI arg `--lincs <path>` or env `SCPC_LINCS`.
 try:
@@ -66,6 +146,11 @@ def load_demo_library() -> pd.DataFrame:
                     }
                 )
         return pd.DataFrame(rows)
+
+
+@st.cache_data(show_spinner=False)
+def load_library_from_path(path: str) -> pd.DataFrame:
+    return load_lincs_long(path)
 
 
 @st.cache_data(show_spinner=False)
