@@ -27,6 +27,68 @@ from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.utils.device import get_device
 
 app = typer.Typer(name="scperturb-cmap", help="scPerturb-CMap command line interface")
+@app.command("validate-h5ad")
+def validate_h5ad(
+    h5ad: str = typer.Option(..., help="Path to .h5ad to validate"),
+    expect_genes: Optional[str] = typer.Option(
+        None, help="'L1000' or path to newline-delimited gene list"
+    ),
+    backed: bool = typer.Option(False, help="Use AnnData backed mode for large files"),
+) -> None:
+    """Validate .h5ad gene symbols and overlap with expected library genes."""
+    import anndata as ad
+    import re
+
+    adata = ad.read_h5ad(h5ad, backed="r" if backed else None)
+    var = adata.var
+    # Determine symbol column
+    symbol_col = None
+    for c in ["gene_symbol", "feature_name", "SYMBOL", "symbol", "gene" ]:
+        if c in var.columns:
+            symbol_col = c
+            break
+    symbols = []
+    if symbol_col is not None:
+        vals = var[symbol_col].astype(str).tolist()
+        # strip Ensembl-like version suffixes embedded in names
+        symbols = [re.sub(r"\..*$", "", s).strip().upper() for s in vals]
+    elif "feature_id" in var.columns:
+        vals = var["feature_id"].astype(str).tolist()
+        symbols = [re.sub(r"\..*$", "", s).strip().upper() for s in vals]
+    else:
+        # fallback to var_names
+        symbols = [str(g).strip().upper() for g in list(adata.var_names)]
+
+    n_vars = int(adata.n_vars)
+    coverage = int(sum(bool(s) for s in symbols))
+    typer.echo(f"genes: {n_vars:,}; symbol coverage: {coverage:,} ({coverage/max(1,n_vars):.1%})")
+
+    expected = None
+    if expect_genes:
+        if expect_genes.upper() == "L1000":
+            expected = set(load_l1000_landmarks(None))
+        else:
+            from pathlib import Path
+            expected = {
+                line.strip().upper()
+                for line in Path(expect_genes).read_text().splitlines()
+                if line.strip()
+            }
+    if expected is not None:
+        symset = set(symbols)
+        overlap = len(symset & set(map(str.upper, expected)))
+        typer.echo(f"overlap with expected genes: {overlap:,}")
+        missing = sorted(list(set(expected) - symset))[:10]
+        if missing:
+            typer.echo(f"example missing: {missing}")
+
+    # obs hints
+    obs_cols = list(adata.obs.columns)
+    cluster_keys = [k for k in obs_cols if k.lower() in {"leiden","louvain","cluster","clusters"}]
+    pseudo_keys = [k for k in obs_cols if any(s in k.lower() for s in ["sample","donor","patient","dataset_id"]) ]
+    typer.echo(f"cluster candidates: {cluster_keys}")
+    typer.echo(f"pseudobulk candidates: {pseudo_keys}")
+
 
 
 @app.command()
@@ -440,10 +502,11 @@ def score(
             if not exprs:
                 # No applicable columns; fall back
                 raise RuntimeError("No applicable filter columns present in dataset")
+            pre_rows = -1
             try:
                 pre_rows = int(dataset.count_rows())
             except Exception:
-                pre_rows = -1
+                pass
             filt = exprs[0]
             for e in exprs[1:]:
                 filt = filt & e

@@ -196,6 +196,18 @@ def rank_drugs(
             z_scores = _zscore(ranking["score"].to_numpy())
             ranking["z_score"] = z_scores
             ranking["p_value"] = 2 * norm.sf(np.abs(z_scores))
+        # Append FDR q-values (BH) for convenience
+        if not ranking.empty and "p_value" in ranking.columns:
+            p = ranking["p_value"].astype(float).to_numpy()
+            m = max(1, len(p))
+            order = pd.Series(p).sort_values().index.to_numpy()
+            ranks = pd.Series(range(1, m + 1), index=order).sort_index().to_numpy()
+            q = (p * m / ranks).clip(upper=1.0)
+            q_sorted = q[order]
+            for i in range(m - 2, -1, -1):
+                q_sorted[i] = min(q_sorted[i], q_sorted[i + 1])
+            q_final = pd.Series(index=order, data=q_sorted).sort_index().to_numpy()
+            ranking["q_value"] = q_final
         return ScoreResult(method="baseline", ranking=ranking, metadata={"top_k": top_k})
 
     if method == "metric":
@@ -215,6 +227,18 @@ def rank_drugs(
             z_scores = _zscore(ranking["score"].to_numpy())
             ranking["z_score"] = z_scores
             ranking["p_value"] = 2 * norm.sf(np.abs(z_scores))
+        # Append FDR q-values (BH)
+        if not ranking.empty and "p_value" in ranking.columns:
+            p = ranking["p_value"].astype(float).to_numpy()
+            m = max(1, len(p))
+            order = pd.Series(p).sort_values().index.to_numpy()
+            ranks = pd.Series(range(1, m + 1), index=order).sort_index().to_numpy()
+            q = (p * m / ranks).clip(upper=1.0)
+            q_sorted = q[order]
+            for i in range(m - 2, -1, -1):
+                q_sorted[i] = min(q_sorted[i], q_sorted[i + 1])
+            q_final = pd.Series(index=order, data=q_sorted).sort_index().to_numpy()
+            ranking["q_value"] = q_final
         return ScoreResult(
             method="metric",
             ranking=ranking,

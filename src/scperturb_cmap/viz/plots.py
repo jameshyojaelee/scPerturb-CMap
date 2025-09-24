@@ -23,6 +23,19 @@ def plot_moa_enrichment_bar(enrich_df: pd.DataFrame, k: int = 12) -> go.Figure:
         labels={"neglog10p": "-log10(p)", "moa": "MOA"},
         title="MOA enrichment among top hits",
     )
+    # Enrich hover with counts and odds ratio
+    if all(c in df.columns for c in ["top", "rest", "odds_ratio", "p_value"]):
+        fig.update_traces(
+            hovertemplate=(
+                "MOA: %{y}<br>" \
+                + "-log10(p): %{x:.2f}<br>" \
+                + "top: %{customdata[0]}<br>" \
+                + "rest: %{customdata[1]}<br>" \
+                + "odds: %{customdata[2]:.2f}<br>" \
+                + "p: %{customdata[3]:.2e}<extra></extra>"
+            ),
+            customdata=df[["top", "rest", "odds_ratio", "p_value"]].to_numpy(),
+        )
     fig.update_layout(margin=dict(l=10, r=10, t=40, b=10), height=420)
     return fig
 

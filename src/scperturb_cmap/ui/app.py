@@ -330,6 +330,9 @@ def main():
                     "target",
                     "cell_line",
                     "score",
+                    "z_score",
+                    "p_value",
+                    "q_value",
                 ]
                 if c in ranking_df.columns
             ]
