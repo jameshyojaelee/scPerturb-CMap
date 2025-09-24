@@ -1,21 +1,26 @@
-FROM python:3.10-slim
+FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
-# System deps (optional). Keep minimal for faster builds.
+# System deps for building wheels
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
  && rm -rf /var/lib/apt/lists/*
 
-# Project files
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-COPY tests ./tests
 
-# Install package with dev/test tools
+RUN pip install --no-cache-dir --upgrade pip build \
+ && python -m build
+
+FROM python:3.10-slim AS runtime
+WORKDIR /app
+
+COPY --from=builder /app/dist /dist
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -e .[dev]
+ && pip install --no-cache-dir /dist/*.whl
 
-# Default command prints readiness message
-CMD ["python", "-c", "print('scPerturb-CMap container ready')"]
+# Default entrypoint to the CLI
+ENTRYPOINT ["scperturb-cmap"]
+CMD ["diagnose"]
  

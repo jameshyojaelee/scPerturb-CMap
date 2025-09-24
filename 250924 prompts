@@ -1,0 +1,166 @@
+### Packaging and Release (PyPI, Conda, Docker)
+- Prompt
+  - You are a Python packaging and release engineer. Prepare this repo for a public v0.1.0 release.
+  - Context: The project is at `/gpfs/commons/home/jameslee/scPerturb-CMap`, CLI entrypoint is `scperturb_cmap.cli:app`, Python ≥3.10.
+  - Tasks:
+    - Rename project in `pyproject.toml` to `scperturb-cmap` (all lowercase); add classifiers, license, authors, `project.urls`, `long_description_content_type="text/markdown"`.
+    - Ensure console script `scperturb-cmap` is correct under `project.scripts`.
+    - Add `CHANGELOG.md`, `CITATION.cff`, `CODE_OF_CONDUCT.md`.
+    - Build and verify: `pipx run build`, `pipx run twine check dist/*`.
+    - Set up GitHub Actions: on tag `v*`, run lint/tests, build wheels/sdist, publish to PyPI (use PyPI token secret).
+    - Docker: multi-stage image (CPU) with entrypoint `scperturb-cmap`; optional CUDA variant. Push `:v0.1.0` and `:latest`.
+    - Conda-forge: create recipe (meta.yaml) pointing to PyPI sdist; open PR to staged-recipes.
+  - Deliverables:
+    - Updated `pyproject.toml`, new docs files, `/.github/workflows/release.yml`, `Dockerfile` finalized.
+  - Acceptance:
+    - `pip install scperturb-cmap` in clean venv runs `scperturb-cmap version`.
+    - Docker image runs `scperturb-cmap diagnose`.
+    - Release job green on a tagged pre-release (dry-run allowed).
+
+### H5AD Robustness and Validation
+- Prompt
+  - You are building rock-solid `.h5ad` ingestion.
+  - Tasks:
+    - Enhance `make-target` to auto-detect gene symbols:
+      - Prefer `var['gene_symbol']`; else `feature_name` (strip dot versions); else map `feature_id` Ensembl→symbol (HGNC table; support version stripping).
+      - Add synonym resolution using HGNC alias file (fallback: `mygene` optional).
+      - Add `--backed` mode; chunked pseudobulk for large datasets.
+    - New CLI: `scperturb-cmap validate-h5ad --h5ad <path> [--expect-genes L1000]`:
+      - Report symbol field used, symbol coverage, overlap with expected gene set, obs keys present, memory footprint, sparse/dense.
+    - Improve overlap guardrails in scoring; actionable errors with top-missing-genes list and fixes.
+    - Tests covering Ensembl vs symbol, sparse vs dense, missing obs keys, huge `.h5ad` backed mode.
+  - Deliverables:
+    - Updated `src/scperturb_cmap/cli.py`, `data/signatures.py`, new `validate-h5ad` command, unit tests.
+  - Acceptance:
+    - `validate-h5ad` prints overlap and recommended flags.
+    - `make-target` succeeds on Ensembl-only and symbol-only `.h5ad` without manual mapping.
+
+### Statistics: FDR, Empirical p-values, Dose/Time Awareness
+- Prompt
+  - You are adding statistical rigor.
+  - Tasks:
+    - Add Benjamini–Hochberg FDR q-values to scoring outputs and UI (per query).
+    - Optional empirical p-values:
+      - Null from permutations or curated negative pairs; cache by cell line/time/dose.
+      - CLI flag `--empirical-p` with `--null-cache` path.
+    - Dose/time summaries:
+      - When columns present, group top hits by dose/time bins; expose in results metadata and UI toggles.
+  - Deliverables:
+    - Changes in `api/score.py`, UI `app.py`, tests for p/q-value correctness, caching docs.
+  - Acceptance:
+    - Outputs include `q_value`, and empirical p-values match expected monotonicity with permutations.
+
+### Performance and Scale
+- Prompt
+  - You are optimizing large-library performance.
+  - Tasks:
+    - Make Arrow dataset pushdown the primary path; log pre/post row counts consistently.
+    - Cache intermediate filtered tables by (cell_line, time, dose) keys (optional).
+    - Vectorize hot loops; profile `baseline` path; ensure pivoting is not the bottleneck.
+    - Document `--partition-by cell_line` guidance; provide dataset validator improvements.
+  - Deliverables:
+    - Optimized code paths in `cli.py`, `data/lincs_loader.py`, profiling notes.
+  - Acceptance:
+    - 10M-row synthetic library filters and scores within target wall-time on shared cluster; memory stable.
+
+### Model Track: Benchmarks and Blending
+- Prompt
+  - You are the ML owner for metric learning.
+  - Tasks:
+    - Ship a small real-pairs benchmark (public/derived) with instructions; log R@K/AUPRC.
+    - Auto-tune `blend` between baseline and metric on a validation split.
+    - Provide model cards and a tiny checkpoint zoo; add `--model-card` printing.
+  - Deliverables:
+    - Data under `examples/out/metric_dataset/` (or URLs), updated `models/train.py`, docs.
+  - Acceptance:
+    - Acceptance harness confirms metric outperforms baseline by defined margin; `blend` auto-learned improves R@50.
+
+### UI/UX Enhancements
+- Prompt
+  - You are polishing the Streamlit UI.
+  - Tasks:
+    - Presets (EMT reversal, IFN-high myeloid, T-cell exhaustion) with curated gene sets.
+    - Session save/load; bookmarking; export includes metadata header.
+    - MOA bar/heatmap tooltips with counts and odds ratios; link out to external drug/target pages (ChEMBL, DrugBank if IDs present).
+  - Deliverables:
+    - Updated `src/scperturb_cmap/ui/app.py`, added preset JSON, minor CSS/Theme tweaks.
+  - Acceptance:
+    - Demo flows reproducible; tooltips informative; exports validated.
+
+### Documentation and Examples
+- Prompt
+  - You are building a docs site and case studies.
+  - Tasks:
+    - MkDocs + Material setup; publish via GitHub Pages on main.
+    - Quickstarts: local + HPC; recipes (pseudobulk, symbol mapping, large-LINCS scoring).
+    - Case studies (with downloadable inputs):
+      - NSCLC CD8+ T (already scaffolded).
+      - EMT in breast cancer.
+      - IFN-high macrophages.
+    - Architecture diagram; API reference from docstrings; troubleshooting.
+  - Deliverables:
+    - `docs/` site, `mkdocs.yml`, GitHub Actions to build/deploy docs.
+  - Acceptance:
+    - Docs build green; examples runnable end-to-end with provided commands.
+
+### CI/CD and Quality Gates
+- Prompt
+  - You are implementing robust CI.
+  - Tasks:
+    - Matrix: Linux/macOS, Python 3.10–3.12; CPU only; optional CUDA job.
+    - Jobs: lint (ruff), tests (pytest), acceptance (`make acceptance`), build artifacts (wheels, Docker).
+    - Security: `pip-audit` or `safety`; YAML and TOML validation; pre-commit.
+    - Cache `~/.cache/pip` and `~/.cache/pytest`.
+  - Deliverables:
+    - `.github/workflows/ci.yml`, badges in README.
+  - Acceptance:
+    - All jobs pass; caching effective; badges reflect status.
+
+### Data Interoperability and Enrichment
+- Prompt
+  - You are expanding data integrations.
+  - Tasks:
+    - Exporters: `cellxgene`-compatible (`.h5ad`), results with rich metadata JSON.
+    - Human↔mouse ortholog mapping with species flag and clear caveats.
+    - Optional OpenTargets/ChEMBL joiners to enrich targets/drugs; expose in UI tooltips/columns.
+  - Deliverables:
+    - New utils in `data/` + doc recipes; UI toggles to include/exclude external annotations.
+  - Acceptance:
+    - Exports load in cellxgene; ortholog mapping unit-tested; external joins behind a feature flag.
+
+### Reproducibility and Deployment
+- Prompt
+  - You are shipping reproducible runs and deployable artifacts.
+  - Tasks:
+    - `environment.yml` pinned; `reproduce.sh` runs acceptance end-to-end locally or in Docker.
+    - Docker Compose and/or Helm chart for hosting the UI with mounted LINCS dataset.
+    - Version pinning in docs; snapshot artifact reproducibility notes.
+  - Deliverables:
+    - `environment.yml`, `reproduce.sh`, `docker-compose.yml`, (optional) `charts/` Helm.
+  - Acceptance:
+    - Fresh machine can reproduce acceptance and open the UI with documented commands.
+
+### Governance and Community
+- Prompt
+  - You are preparing the project for collaboration.
+  - Tasks:
+    - `CONTRIBUTING.md` with dev workflow, coding style, test requirements.
+    - Issue/PR templates, label schema, triage guidelines.
+    - CODE_OF_CONDUCT and security policy (vuln disclosure).
+  - Deliverables:
+    - `.github/ISSUE_TEMPLATE/*.md`, `.github/pull_request_template.md`, policy docs.
+  - Acceptance:
+    - New issues/PRs are guided and labeled automatically; docs visible in repo.
+
+### Observability and Error Reporting (Optional)
+- Prompt
+  - You are improving logs and user-facing diagnostics.
+  - Tasks:
+    - Uniform logging with levels and concise summaries for filters and counts.
+    - Structured error messages with “actionable next step” hints (e.g., symbol mapping, overlap deficits).
+  - Deliverables:
+    - Logging improvements in CLI and API; doc section on reading logs.
+  - Acceptance:
+    - Typical user errors produce clear, actionable guidance.
+
+If you want, I can start with Packaging/Release and H5AD Robustness prompts and implement them directly in this repo next.

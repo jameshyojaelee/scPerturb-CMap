@@ -558,6 +558,22 @@ def score(
 
     res = rank_drugs(ts, df_long, method=method, model_path=model_path, top_k=top_k, blend=blend)
     out_df = pd.DataFrame(res.model_dump()["ranking"])  # serialized as list-of-dicts
+    # Optional FDR q-values (per query) using Benjamini–Hochberg
+    try:
+        if not out_df.empty and "p_value" in out_df.columns:
+            p = out_df["p_value"].astype(float).to_numpy()
+            m = max(1, len(p))
+            order = pd.Series(p).sort_values().index.to_numpy()
+            ranks = pd.Series(range(1, m + 1), index=order).sort_index().to_numpy()
+            q = (p * m / ranks).clip(upper=1.0)
+            # enforce monotonicity when sorted by p
+            q_sorted = q[order]
+            for i in range(m - 2, -1, -1):
+                q_sorted[i] = min(q_sorted[i], q_sorted[i + 1])
+            q_final = pd.Series(index=order, data=q_sorted).sort_index().to_numpy()
+            out_df["q_value"] = q_final
+    except Exception:
+        pass
     if output:
         Path(output).parent.mkdir(parents=True, exist_ok=True)
         out_df.to_parquet(output, engine="pyarrow", index=False)

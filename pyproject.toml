@@ -6,15 +6,31 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "scPerturb-CMap"
+name = "scperturb-cmap"
 version = "0.1.0"
-description = "scPerturb-CMap: ML utilities and tools for perturbational profiling."
+description = "scPerturb-CMap: single-cell connectivity mapping toolkit for drug repurposing."
 readme = "README.md"
+long_description_content_type = "text/markdown"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [
   { name = "scPerturb-CMap Authors" }
 ]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+urls = {
+  "Homepage" = "https://github.com/",
+  "Repository" = "https://github.com/",
+}
 dependencies = [
   "anndata",
   "scanpy",
