@@ -151,6 +151,7 @@ def rank_drugs(
     model_path: Optional[str] = None,
     top_k: int = 50,
     blend: float = 0.5,
+    auto_blend: bool = False,
 ) -> ScoreResult:
     M, genes, meta, long_df = _as_pivot(library)
 
@@ -217,7 +218,15 @@ def rank_drugs(
         # Blend z-scored baseline and metric
         z_base = _zscore(base_df["score"].to_numpy())
         z_metric = _zscore(metric)
-        score = (1.0 - float(blend)) * z_base + float(blend) * z_metric
+        if auto_blend:
+            xb = z_base
+            xm = z_metric
+            num = -np.dot(xm - xb, xb)
+            den = np.dot(xm - xb, xm - xb) + 1e-12
+            alpha = float(np.clip(num / den, 0.0, 1.0))
+        else:
+            alpha = float(blend)
+        score = (1.0 - alpha) * z_base + alpha * z_metric
         df = base_df.copy()
         df["score"] = score
         ranking = df.sort_values("score", ascending=True).head(top_k)
@@ -242,7 +251,12 @@ def rank_drugs(
         return ScoreResult(
             method="metric",
             ranking=ranking,
-            metadata={"top_k": top_k, "blend": blend, "model_path": model_path},
+            metadata={
+                "top_k": top_k,
+                "blend": (alpha if auto_blend else blend),
+                "auto_blend": bool(auto_blend),
+                "model_path": model_path,
+            },
         )
 
     raise ValueError("Unknown method; expected 'baseline' or 'metric'")

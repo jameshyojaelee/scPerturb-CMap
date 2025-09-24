@@ -4,6 +4,7 @@ import json
 import platform
 import subprocess
 from pathlib import Path
+import logging
 from typing import List, Optional
 
 import pandas as pd
@@ -27,6 +28,20 @@ from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.utils.device import get_device
 
 app = typer.Typer(name="scperturb-cmap", help="scPerturb-CMap command line interface")
+
+
+@app.callback()
+def _configure(
+    ctx: typer.Context,
+    log_level: str = typer.Option(
+        "INFO",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR)",
+        case_sensitive=False,
+    ),
+) -> None:
+    """Configure global logging for the CLI."""
+    lvl = getattr(logging, str(log_level).upper(), logging.INFO)
+    logging.basicConfig(level=lvl, format="[%(levelname)s] %(message)s")
 @app.command("validate-h5ad")
 def validate_h5ad(
     h5ad: str = typer.Option(..., help="Path to .h5ad to validate"),

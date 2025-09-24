@@ -1,0 +1,15 @@
+site_name: scPerturb-CMap
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - CLI: cli.md
+  - API: api.md
+  - Case Studies:
+    - NSCLC CD8+ T: cases/nsclc_cd8.md
+    - EMT (Breast): cases/emt_breast.md
+    - IFN-high Macrophages: cases/ifn_macrophage.md
+plugins:
+  - search
+
