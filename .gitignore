@@ -23,6 +23,7 @@ examples/out/
 data/
 
 # Logs
+logs/
 *.log
 *.out
 *.err
@@ -45,4 +46,6 @@ artifacts/**
 *.log
 *.pyc
 __pycache__/
+# Local notes
+notes/
 250924 prompts.md

@@ -75,6 +75,12 @@ Supported data contracts:
 
 ---
 
+### How the model works
+
+I encode the target signature and each LINCS signature into a shared embedding space using a DualEncoder trained on known inversion pairs (contrastive/triplet losses). Similarity in this space estimates reversal strength. At inference, I blend the learned metric with the statistical baseline (configurable or auto-tuned) to yield robust, accurate rankings.
+
+---
+
 ## Quickstart
 
 ```bash

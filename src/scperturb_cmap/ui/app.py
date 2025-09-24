@@ -67,6 +67,48 @@ EXTERNAL_ID_LINKS: Dict[str, Dict[str, str]] = {
 }
 
 
+def apply_theme() -> None:
+    st.markdown(
+        """
+        <style>
+        :root {
+            --scpc-primary: #1f3b57;
+            --scpc-accent: #f39c12;
+            --scpc-muted: #6c7a89;
+        }
+        body, .stApp {
+            font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+            color: #1f2d3d;
+        }
+        [data-testid="stSidebar"] > div:first-child {
+            background-color: #f5f7fb;
+            border-right: 1px solid #e1e7f0;
+        }
+        .stMetric {
+            background: #ffffff;
+            border-radius: 6px;
+            padding: 0.75rem;
+            border: 1px solid #e6ecf3;
+        }
+        .stButton button {
+            border-radius: 4px;
+            border: 1px solid var(--scpc-primary);
+            color: #ffffff !important;
+            background: var(--scpc-primary);
+        }
+        .stButton button:hover {
+            background: var(--scpc-accent);
+            border-color: var(--scpc-accent);
+        }
+        .stDataFrame thead tr th {
+            font-weight: 600 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def ensure_session_defaults() -> None:
     default_path = st.session_state.get("demo_lincs_path", "examples/data/lincs_demo.parquet")
     if "library_path" not in st.session_state:
@@ -389,6 +431,63 @@ def build_export_files(
     json_bytes = json.dumps(json_payload, indent=2).encode("utf-8")
     return csv_bytes, json_bytes
 
+
+def apply_preset_signature(
+    name: str,
+    preset_payload: Dict[str, Any],
+    library_df: pd.DataFrame,
+    top_k: int,
+) -> Tuple[TargetSignature, pd.DataFrame]:
+    up_genes = list(map(str, preset_payload.get("up_genes", [])))
+    down_genes = list(map(str, preset_payload.get("down_genes", [])))
+    if not up_genes and not down_genes:
+        raise ValueError(f"Preset '{name}' is missing gene lists.")
+
+    lib_genes: Optional[set[str]] = None
+    if "gene_symbol" in library_df.columns:
+        lib_genes = set(library_df["gene_symbol"].astype(str).str.upper())
+
+    def _restrict(genes: List[str]) -> List[str]:
+        if lib_genes is None:
+            return genes
+        overlapping = [g for g in genes if g.upper() in lib_genes]
+        return overlapping if overlapping else genes
+
+    restricted_up = _restrict(up_genes)
+    restricted_down = _restrict(down_genes)
+
+    target_sig = target_from_gene_lists(restricted_up, restricted_down)
+    qc_summary = summarize_target_signature(
+        target_sig,
+        library_genes=(list(lib_genes) if lib_genes is not None else None),
+    )
+    source_context = {
+        "mode": "Preset",
+        "preset": name,
+        "gene_lists": {"up_genes": restricted_up, "down_genes": restricted_down},
+    }
+    target_sig.metadata = {
+        **target_sig.metadata,
+        "qc_summary": qc_summary,
+        "source": source_context,
+    }
+
+    res = rank_drugs(target_sig, library_df, method="baseline", top_k=int(top_k))
+    ranking_df = res.ranking if isinstance(res.ranking, pd.DataFrame) else pd.DataFrame(res.ranking)
+
+    st.session_state["target_mode"] = "+ Gene lists"
+    st.session_state["up_genes_text"] = "\n".join(restricted_up)
+    st.session_state["down_genes_text"] = "\n".join(restricted_down)
+    st.session_state["active_preset"] = name
+    st.session_state["method"] = "baseline"
+    st.session_state["blend"] = 0.5
+    st.session_state["target_signature"] = target_sig.model_dump()
+    st.session_state["target_context"] = source_context
+    st.session_state["results_df"] = ranking_df
+    st.session_state.setdefault("session_metadata", {})["last_preset"] = name
+
+    return target_sig, ranking_df
+
 # Allow passing a default LINCS path via CLI arg `--lincs <path>` or env `SCPC_LINCS`.
 try:
     if "--lincs" in sys.argv:
@@ -659,85 +758,142 @@ def plot_signature(ts: TargetSignature, max_genes: int = 10):
 
 
 def main():
+    ensure_session_defaults()
+    handle_bookmark_on_load()
+    apply_theme()
+
     st.title("scPerturb-CMap: Connectivity Demo")
-    lincs_long = load_demo_library()
-    # Accept override via environment to point UI to prepared landmark library on HPC
-    if os.getenv("SCPC_LINCS") and os.path.exists(os.environ["SCPC_LINCS"]):
+
+    base_library = load_demo_library()
+    env_lincs = os.getenv("SCPC_LINCS")
+    if env_lincs and os.path.exists(env_lincs):
         try:
-            lincs_long = load_lincs_long(os.environ["SCPC_LINCS"])
-            st.session_state["demo_lincs_path"] = os.environ["SCPC_LINCS"]
+            base_library = load_lincs_long(env_lincs)
+            st.session_state["demo_lincs_path"] = env_lincs
+        except Exception:  # pragma: no cover - defensive fallback path
+            st.sidebar.warning(
+                "Unable to load dataset referenced by SCPC_LINCS; falling back to demo library."
+            )
+
+    (
+        target_sig,
+        library_df,
+        method,
+        top_k,
+        model_file,
+        blend,
+        cln,
+        lincs_path,
+        target_context,
+        model_label,
+    ) = sidebar_controls(base_library)
+
+    stored_sig_payload = st.session_state.get("target_signature")
+    if stored_sig_payload:
+        try:
+            target_sig = TargetSignature(**stored_sig_payload)
         except Exception:
             pass
 
-    target_sig, lincs_long, method, top_k, model_file, blend, cln, lincs_path = sidebar_controls(
-        lincs_long
+    if isinstance(target_sig.metadata, dict) and target_sig.metadata.get("source"):
+        target_context = target_sig.metadata["source"]
+
+    presets = load_ui_presets()
+    if presets:
+        st.sidebar.markdown("### Curated presets")
+        preset_columns = st.sidebar.columns(len(presets))
+        for (preset_name, preset_payload), column in zip(presets.items(), preset_columns):
+            if column.button(preset_name, use_container_width=True):
+                try:
+                    target_sig, preset_df = apply_preset_signature(
+                        preset_name,
+                        preset_payload,
+                        library_df,
+                        top_k=top_k,
+                    )
+                    target_context = target_sig.metadata.get("source", target_context)
+                    method = "baseline"
+                    blend = None
+                    model_file = None
+                    model_label = None
+                    st.session_state["results_df"] = preset_df
+                    st.toast(f"Preset '{preset_name}' applied", icon="✨")
+                except Exception as exc:  # pragma: no cover - UI feedback
+                    st.sidebar.error(f"Failed to run preset '{preset_name}': {exc}")
+
+    filtered_library = library_df
+    if cln and "cell_line" in library_df.columns:
+        mask = library_df["cell_line"].astype(str) == str(cln)
+        filtered_library = library_df.loc[mask].reset_index(drop=True)
+
+    selected_library_path = (
+        lincs_path
+        or st.session_state.get("library_path")
+        or st.session_state.get("demo_lincs_path")
+        or "examples/data/lincs_demo.parquet"
     )
 
-    # Presets
-    st.sidebar.markdown("### Presets")
-    col_a, col_b, col_c = st.sidebar.columns(3)
-    emt_clicked = col_a.button("EMT reversal demo")
-    ifng_clicked = col_b.button("IFN-high demo")
-    tex_clicked = col_c.button("T-cell exhaustion")
+    ranking_df: Optional[pd.DataFrame] = None
+    score_metadata: Dict[str, Any] = {}
+    scoring_error: Optional[str] = None
 
-    def _load_demo_sets(path: str = "examples/data/demo_gene_sets.json"):
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                return json.load(f)
-        return {
-            "EMT_UP": ["VIM", "FN1", "ZEB1", "SNAI1", "ITGA5"],
-            "EMT_DN": ["EPCAM", "KRT8", "KRT18", "OCLN", "CLDN4"],
-            "IFNG_UP": ["STAT1", "IRF1", "CXCL10", "HLA-A", "ISG15"],
-            "IFNG_DN": [],
-            "TEX_UP": ["PDCD1", "LAG3", "HAVCR2", "CTLA4", "TIGIT"],
-            "TEX_DN": [],
-        }
+    blend_arg = float(blend) if blend is not None else 0.5
 
-    def _score_from_gene_lists(up, dn, library, method: str = "baseline", top_k: int = 50):
-        # Restrict to genes present in the library to avoid zero-overlap issues
-        try:
-            lib_df = library if isinstance(library, pd.DataFrame) else load_lincs_long(str(library))
-            lib_genes = set(lib_df["gene_symbol"].astype(str).str.upper())
-            up = [g for g in up if g.upper() in lib_genes]
-            dn = [g for g in dn if g.upper() in lib_genes]
-        except Exception:
-            pass
-        if not up and not dn:
-            raise ValueError("No overlap between provided gene lists and library genes.")
-        ts = target_from_gene_lists(up, dn)
-        res = rank_drugs(target_signature=ts, library=library, method=method, top_k=top_k)
-        # Ensure DataFrame
-        df_rank = (
-            res.ranking if isinstance(res.ranking, pd.DataFrame) else pd.DataFrame(res.ranking)
-        )
-        return ts, df_rank
-
-    if emt_clicked or ifng_clicked or tex_clicked:
-        gs = _load_demo_sets()
-        library_obj = (
-            load_lincs_long(str(lincs_path)) if os.path.exists(str(lincs_path)) else lincs_long
-        )
-        if emt_clicked:
-            up, dn = gs.get("EMT_UP", []), gs.get("EMT_DN", [])
-        elif ifng_clicked:
-            up, dn = gs.get("IFNG_UP", []), gs.get("IFNG_DN", [])
+    if method == "metric" and not model_file:
+        default_ckpt = os.environ.get("SCPC_MODEL", "artifacts/best.pt")
+        if os.path.exists(default_ckpt):
+            model_file = default_ckpt
+            model_label = os.path.basename(default_ckpt)
         else:
-            up, dn = gs.get("TEX_UP", []), gs.get("TEX_DN", [])
-        with st.spinner("Scoring preset against drug library..."):
-            ts_preset, df_rank = _score_from_gene_lists(
-                up,
-                dn,
-                library_obj,
-                method="baseline",
-                top_k=100,
-            )
-            st.session_state.target_sig = {"genes": ts_preset.genes, "weights": ts_preset.weights}
-            st.session_state.results_df = df_rank
+            scoring_error = "Metric method requires a checkpoint. Upload one or set SCPC_MODEL."
 
-    # Optional filter by cell line
-    # Apply filter if user selected in sidebar
+    if scoring_error is None:
+        try:
+            res = rank_drugs(
+                target_sig,
+                filtered_library,
+                method=method,
+                model_path=model_file,
+                top_k=top_k,
+                blend=blend_arg,
+            )
+            ranking_df = (
+                res.ranking
+                if isinstance(res.ranking, pd.DataFrame)
+                else pd.DataFrame(res.ranking)
+            )
+            score_metadata = res.metadata or {}
+            st.session_state["results_df"] = ranking_df
+            st.session_state["last_scoring_meta"] = score_metadata
+            st.session_state.setdefault("session_metadata", {})["last_scored_at"] = (
+                datetime.utcnow().isoformat(timespec="seconds") + "Z"
+            )
+        except Exception as exc:
+            scoring_error = str(exc)
+
+    if ranking_df is None:
+        cached = st.session_state.get("results_df")
+        if isinstance(cached, pd.DataFrame):
+            ranking_df = cached
+        elif cached is not None:
+            ranking_df = pd.DataFrame(cached)
+
+    export_metadata: Dict[str, Any] = {}
+    csv_bytes: Optional[bytes] = None
+    json_bytes: Optional[bytes] = None
+    session_payload: Optional[Dict[str, Any]] = None
+    session_bytes: Optional[bytes] = None
+
+    if scoring_error:
+        message = (
+            f"Scoring issue: {scoring_error}. Showing last available results."
+            if ranking_df is not None and not ranking_df.empty
+            else f"Scoring failed: {scoring_error}"
+        )
+        st.warning(message)
 
     col1, col2 = st.columns([1, 2])
+
     with col1:
         plot_signature(target_sig)
         summary = (
@@ -747,117 +903,173 @@ def main():
         )
         if summary:
             st.markdown("**Target QC**")
-            st.dataframe(pd.DataFrame(summary.items(), columns=["metric", "value"]))
-
-    # Filter library by selected cell line if any
-    if cln and "cell_line" in lincs_long.columns:
-        lib_df = (
-            lincs_long[lincs_long["cell_line"].astype(str) == str(cln)].reset_index(
-                drop=True
+            st.dataframe(
+                pd.DataFrame(summary.items(), columns=["metric", "value"]),
+                use_container_width=True,
             )
-        )
-    else:
-        lib_df = lincs_long
+        info_rows: List[Tuple[str, Any]] = []
+        if isinstance(target_context, dict):
+            if target_context.get("preset"):
+                info_rows.append(("Preset", target_context["preset"]))
+            info_rows.append(("Mode", target_context.get("mode", st.session_state.get("target_mode"))))
+        info_rows.append(("Up genes", sum(1 for w in target_sig.weights if w > 0)))
+        info_rows.append(("Down genes", sum(1 for w in target_sig.weights if w < 0)))
+        info_rows.append(("Library", Path(str(selected_library_path)).name))
+        info_df = pd.DataFrame(info_rows, columns=["attribute", "value"])
+        st.dataframe(info_df, hide_index=True, use_container_width=True)
 
     with col2:
-        try:
-            # Default checkpoint for metric if none uploaded and available
-            if method == "metric" and not model_file:
-                default_ckpt = os.environ.get("SCPC_MODEL", "artifacts/best.pt")
-                if os.path.exists(default_ckpt):
-                    model_file = default_ckpt
-                else:
-                    st.warning("Metric method requires a checkpoint. Upload one or set SCPC_MODEL.")
-            res = rank_drugs(
-                target_sig,
-                lib_df,
-                method=method,
-                model_path=model_file,
-                top_k=top_k,
-                blend=(0.5 if blend is None else float(blend)),
-            )
-            ranking_df = (
-                res.ranking
-                if isinstance(res.ranking, pd.DataFrame)
-                else pd.DataFrame(res.ranking)
-            )
-            st.session_state["results_df"] = ranking_df
-            st.subheader("Results")
-            show_cols = [
-                c
-                for c in [
-                    "signature_id",
-                    "compound",
-                    "moa",
-                    "target",
-                    "cell_line",
-                    "score",
-                    "z_score",
-                    "p_value",
-                    "q_value",
-                ]
-                if c in ranking_df.columns
+        if ranking_df is None or ranking_df.empty:
+            st.info("No results available yet. Adjust the target or scoring parameters to recompute.")
+        else:
+            base_columns = [
+                "signature_id",
+                "compound",
+                "moa",
+                "target",
+                "cell_line",
+                "score",
+                "z_score",
+                "p_value",
+                "q_value",
             ]
-            st.dataframe(
-                ranking_df[show_cols],
+            external_cols = [
+                c for c in ranking_df.columns if c.lower() in EXTERNAL_ID_LINKS
+            ]
+            other_cols = [
+                c
+                for c in ranking_df.columns
+                if c not in base_columns and c not in external_cols
+            ]
+            ordered_cols = [c for c in base_columns if c in ranking_df.columns] + external_cols + other_cols
+            table_df = ranking_df[ordered_cols]
+            table_df, link_config = prepare_link_columns(table_df)
+            column_config: Dict[str, Any] = {
+                "score": st.column_config.NumberColumn(
+                    "score",
+                    help="Lower implies stronger predicted reversal",
+                    format="%.3f",
+                ),
+                "z_score": st.column_config.NumberColumn("z_score", format="%.2f"),
+                "p_value": st.column_config.NumberColumn("p_value", format="%.2e"),
+                "q_value": st.column_config.NumberColumn("q_value", format="%.2e"),
+                "moa": st.column_config.TextColumn("moa", help="Mechanism of action"),
+                "target": st.column_config.TextColumn(
+                    "target", help="Primary target or target family"
+                ),
+            }
+            column_config.update(link_config)
+            st.data_editor(
+                table_df,
+                hide_index=True,
                 use_container_width=True,
-                column_config={
-                    "score": st.column_config.NumberColumn(
-                        "score",
-                        help="Lower implies stronger predicted reversal",
-                    ),
-                    "moa": st.column_config.TextColumn(
-                        "moa", help="Mechanism of action"
-                    ),
-                    "target": st.column_config.TextColumn(
-                        "target",
-                        help="Primary target or target family",
-                    ),
-                },
+                column_config=column_config,
+                disabled=True,
             )
-            # Export buttons; replace NaNs for JSON safety
-            df_export = ranking_df.copy()
-            for c in df_export.columns:
-                if c not in df_export.select_dtypes(include=["number"]).columns:
-                    df_export[c] = df_export[c].astype(object).where(pd.notna(df_export[c]), "")
-            csv = df_export.to_csv(index=False).encode("utf-8")
+
+            export_metadata = build_export_metadata(
+                target_sig,
+                target_context if isinstance(target_context, dict) else {},
+                method,
+                top_k,
+                (blend if method == "metric" else None),
+                cln,
+                str(selected_library_path),
+                model_label,
+                model_file,
+                score_metadata,
+            )
+            csv_bytes, json_bytes = build_export_files(ranking_df, export_metadata)
+            session_payload = build_session_payload(
+                target_sig,
+                target_context if isinstance(target_context, dict) else {},
+                method,
+                top_k,
+                (blend if method == "metric" else None),
+                cln,
+                str(selected_library_path),
+                model_label,
+                model_file,
+                score_metadata,
+                ranking_df,
+                export_metadata,
+            )
+            session_bytes = json.dumps(session_payload, indent=2).encode("utf-8")
+            st.session_state["session_snapshot"] = session_payload
+
             dl_col1, dl_col2 = st.columns(2)
             dl_col1.download_button(
                 "Download CSV",
-                data=csv,
+                data=csv_bytes,
                 file_name="scperturb_cmap_results.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
-            import datetime as _dt
-            results_json = {
-                "results": df_export.to_dict(orient="records"),
-                "meta": {
-                    "library": str(lincs_path),
-                    "n": int(len(df_export)),
-                    "method": method,
-                    "top_k": int(top_k),
-                    "cell_line_filter": cln if cln else None,
-                    "generated_at": _dt.datetime.utcnow().isoformat() + "Z",
-                },
-            }
             dl_col2.download_button(
                 "Download JSON",
-                data=json.dumps(results_json, indent=2).encode("utf-8"),
+                data=json_bytes,
                 file_name="scperturb_cmap_results.json",
                 mime="application/json",
                 use_container_width=True,
             )
-        except Exception as e:
-            st.error(f"Scoring failed: {e}")
 
-    # MOA enrichment
-    if st.session_state.get("results_df") is not None:
-        df_cached = st.session_state["results_df"]
-        if not df_cached.empty:
-            e_df = moa_enrichment(df_cached, top_n=50)
-            st.plotly_chart(plot_moa_enrichment_bar(e_df), use_container_width=True)
-            st.plotly_chart(plot_moa_enrichment_heatmap(df_cached), use_container_width=True)
+    bookmark_payload = {
+        "version": SESSION_VERSION,
+        "library_path": str(selected_library_path),
+        "method": method,
+        "top_k": int(top_k),
+        "blend": (
+            float(blend) if (blend is not None and method == "metric") else None
+        ),
+        "cell_line_filter": cln,
+        "target_context": target_context if isinstance(target_context, dict) else {},
+        "target_signature": target_sig.model_dump(),
+        "model_checkpoint": ({"label": model_label} if model_label else None),
+    }
+    bookmark_token = encode_state_token(bookmark_payload)
+    st.session_state["bookmark_token"] = bookmark_token
+
+    with st.sidebar.expander("Session & sharing", expanded=False):
+        if session_bytes:
+            st.download_button(
+                "Export session JSON",
+                data=session_bytes,
+                file_name="scperturb_cmap_session.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        session_import = st.file_uploader(
+            "Import session JSON", type="json", key="session_import"
+        )
+        if session_import is not None:
+            try:
+                payload = json.loads(session_import.getvalue().decode("utf-8"))
+                apply_state_payload(payload, include_results=True)
+                st.toast("Session imported", icon="📄")
+                st.experimental_rerun()
+            except Exception as exc:
+                st.error(f"Failed to import session: {exc}")
+        st.text_input(
+            "Bookmark token",
+            value=bookmark_token,
+            key="bookmark_token_display",
+            help=f"Share or append to the URL as ?{BOOKMARK_PARAM}=<token>",
+            disabled=True,
+        )
+        if st.button("Apply bookmark to URL", key="bookmark_update"):
+            st.experimental_set_query_params(**{BOOKMARK_PARAM: bookmark_token})
+            st.toast("Bookmark added to browser URL", icon="🔗")
+        st.code(f"?{BOOKMARK_PARAM}={bookmark_token}")
+
+    # MOA enrichment visuals will be updated below once results are available
+    ranking_ready = ranking_df is not None and not ranking_df.empty
+    if ranking_ready:
+        e_df = moa_enrichment(ranking_df, top_n=50)
+        st.plotly_chart(plot_moa_enrichment_bar(e_df), use_container_width=True)
+        st.plotly_chart(
+            plot_moa_enrichment_heatmap(ranking_df, e_df),
+            use_container_width=True,
+        )
 
 
 if __name__ == "__main__":
