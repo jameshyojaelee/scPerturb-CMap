@@ -6,6 +6,7 @@ nav:
   - Quickstart: quickstart.md
   - CLI: cli.md
   - API: api.md
+  - HPC: hpc.md
   - Case Studies:
     - NSCLC CD8+ T: cases/nsclc_cd8.md
     - EMT (Breast): cases/emt_breast.md

@@ -36,7 +36,7 @@ make hpc-setup
 
 Notes on Environments
 ---------------------
-- The `Makefile` uses a local `.venv/` for development. The `scripts/setup_hpc.sh` script will prefer Conda/Mamba if found and create/use an env named `scpc`.
+- The `Makefile` uses a local `.venv/` for development. The `scripts/hpc/setup_hpc.sh` script will prefer Conda/Mamba if found and create/use an env named `scpc`.
 - If your site requires modules (e.g., `module load cuda/12.1`), load them before `make hpc-setup`.
 
 Running Jobs (Slurm example)
@@ -115,7 +115,7 @@ Option B — Submit a Slurm job (recommended on headless clusters):
 ```bash
 # Ensure you have downloaded raw files into $SCPC_BASE/data/raw first.
 # Then submit the conversion job:
-sbatch scripts/convert_lincs_gctx.sbatch
+sbatch scripts/slurm/convert_lincs_gctx.sbatch
 
 # Optional environment overrides (set before sbatch):
 #   SCPC_BASE=/path/to/base         # default: repo root

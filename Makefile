@@ -25,8 +25,8 @@ train:
 	$(PY) -m scperturb_cmap.models.train hydra.run.dir=.
 
 demo:
-	$(PY) scripts/make_demo_h5ad.py --output examples/data/demo.h5ad
-	$(PY) scripts/print_demo_stats.py
+	$(PY) scripts/demo/make_demo_h5ad.py --output examples/data/demo.h5ad
+	$(PY) scripts/demo/print_demo_stats.py
 	@mkdir -p examples/out
 	@echo '{"genes":["G1","G2","G10"],"weights":[1.0,1.0,-1.0],"metadata":{}}' > examples/out/target.json
 	$(PY) -m scperturb_cmap.cli score \
@@ -43,13 +43,13 @@ acceptance:
 	$(PY) scripts/check_acceptance.py
 
 hpc-setup:
-	chmod +x scripts/setup_hpc.sh
-	./scripts/setup_hpc.sh
+	chmod +x scripts/hpc/setup_hpc.sh
+	./scripts/hpc/setup_hpc.sh
 
 hpc-ui:
-	chmod +x scripts/ui_hpc.sh
-	./scripts/ui_hpc.sh
+	chmod +x scripts/hpc/ui_hpc.sh
+	./scripts/hpc/ui_hpc.sh
 
 validate-dataset:
 	@DATASET?=data/lincs/lincs_level5_landmark_long
-	$(PY) scripts/validate_parquet_dataset.py --dataset $${DATASET} --partition cell_line --full --head 5
+	$(PY) scripts/validators/validate_parquet_dataset.py --dataset $${DATASET} --partition cell_line --full --head 5

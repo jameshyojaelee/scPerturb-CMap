@@ -173,7 +173,7 @@ scperturb-cmap prepare-lincs \
 Tips:
 - Supply `--landmarks-file` to reuse an existing 978-gene list; otherwise the converter derives one.
 - For very large libraries, prefer `--partition-by cell_line` and use `--cell-lines` during scoring to leverage Arrow predicate pushdown.
-- A validation script (`python scripts/validate_parquet_dataset.py --dataset …`) summarizes partition counts and schema consistency.
+- A validation script (`python scripts/validators/validate_parquet_dataset.py --dataset …`) summarizes partition counts and schema consistency.
 
 ---
 

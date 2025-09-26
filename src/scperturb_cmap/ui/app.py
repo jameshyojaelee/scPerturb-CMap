@@ -72,36 +72,101 @@ def apply_theme() -> None:
         """
         <style>
         :root {
-            --scpc-primary: #1f3b57;
-            --scpc-accent: #f39c12;
-            --scpc-muted: #6c7a89;
+            --scpc-bg: #090f1f;
+            --scpc-surface: #111a2e;
+            --scpc-surface-alt: #16213d;
+            --scpc-border: #1f2b47;
+            --scpc-text: #e2e8f0;
+            --scpc-muted: #94a3b8;
+            --scpc-primary: linear-gradient(120deg, #38bdf8, #6366f1);
+            --scpc-primary-solid: #38bdf8;
+            --scpc-accent: #f97316;
         }
         body, .stApp {
             font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
-            color: #1f2d3d;
+            background-color: var(--scpc-bg);
+            color: var(--scpc-text);
+        }
+        .stApp header, .stApp [data-testid="stHeader"] {
+            background: transparent;
         }
         [data-testid="stSidebar"] > div:first-child {
-            background-color: #f5f7fb;
-            border-right: 1px solid #e1e7f0;
+            background: var(--scpc-surface);
+            border-right: 1px solid var(--scpc-border);
         }
-        .stMetric {
-            background: #ffffff;
+        [data-testid="stSidebar"] * {
+            color: var(--scpc-text) !important;
+        }
+        .stMarkdown, .stText, .stTextInput, .stNumberInput, .stSelectbox, .stDataFrame, .stDataEditor {
+            color: var(--scpc-text) !important;
+        }
+        .stTextInput > div > div > input,
+        .stNumberInput input,
+        .stSelectbox div[data-baseweb="select"] > div {
+            background: var(--scpc-surface-alt);
+            color: var(--scpc-text);
             border-radius: 6px;
-            padding: 0.75rem;
-            border: 1px solid #e6ecf3;
+            border: 1px solid var(--scpc-border);
+        }
+        .stSlider > div[data-baseweb="slider"] > div {
+            background: var(--scpc-border);
+        }
+        .stSlider [role="slider"] {
+            background: var(--scpc-primary-solid);
         }
         .stButton button {
-            border-radius: 4px;
-            border: 1px solid var(--scpc-primary);
+            border-radius: 6px;
+            border: none;
             color: #ffffff !important;
-            background: var(--scpc-primary);
+            background-image: var(--scpc-primary);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
         .stButton button:hover {
-            background: var(--scpc-accent);
-            border-color: var(--scpc-accent);
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(56, 189, 248, 0.45);
         }
-        .stDataFrame thead tr th {
+        .stDataFrame thead tr th, .stDataEditor thead tr th {
+            background: var(--scpc-surface-alt) !important;
+            color: var(--scpc-text) !important;
             font-weight: 600 !important;
+            border-bottom: 1px solid var(--scpc-border) !important;
+        }
+        .stDataFrame tbody tr, .stDataEditor tbody tr {
+            background: var(--scpc-surface) !important;
+        }
+        .stDataFrame tbody tr:nth-child(even), .stDataEditor tbody tr:nth-child(even) {
+            background: var(--scpc-surface-alt) !important;
+        }
+        .main > div {
+            background: transparent;
+        }
+        .stMetric {
+            background: var(--scpc-surface-alt);
+            border-radius: 10px;
+            border: 1px solid var(--scpc-border);
+            box-shadow: 0 15px 35px rgba(13, 20, 40, 0.35);
+        }
+        .stTabs [data-baseweb="tab"] {
+            background: transparent;
+            color: var(--scpc-muted);
+        }
+        .stTabs [data-baseweb="tab"]:hover {
+            color: var(--scpc-text);
+        }
+        .stTabs [data-baseweb="tab"] [role="tab"] {
+            border-bottom: 2px solid transparent;
+        }
+        .stTabs [aria-selected="true"] [role="tab"] {
+            border-bottom: 2px solid var(--scpc-primary-solid);
+            color: var(--scpc-text);
+        }
+        code, pre {
+            background: rgba(15, 23, 42, 0.75) !important;
+            color: #e0f2fe !important;
+        }
+        .stPlotlyChart {
+            background: transparent;
         }
         </style>
         """,
@@ -154,13 +219,19 @@ def decode_state_token(token: str) -> Dict[str, Any]:
 
 
 def handle_bookmark_on_load() -> None:
-    params = st.experimental_get_query_params()
+    if st.session_state.get("_bookmark_consumed", False):
+        return
+
+    params = st.query_params
     tokens = params.get(BOOKMARK_PARAM)
     if not tokens:
         return
-    if st.session_state.get("_bookmark_consumed", False):
+    if isinstance(tokens, (list, tuple)):
+        token = tokens[0] if tokens else ""
+    else:
+        token = tokens
+    if not token:
         return
-    token = tokens[0]
     try:
         payload = decode_state_token(token)
         payload["source"] = "bookmark"
@@ -747,14 +818,23 @@ def plot_signature(ts: TargetSignature, max_genes: int = 10):
     neg = df.head(max_genes)
     pos = df.tail(max_genes)
     sub = pd.concat([neg, pos])
+    sub["direction"] = np.where(sub["weight"] >= 0, "Up", "Down")
     fig = px.bar(
         sub,
         x="gene",
         y="weight",
-        color=(sub["weight"] > 0),
+        color="direction",
+        color_discrete_map={"Up": "#38bdf8", "Down": "#f97316"},
         title="Target signature preview",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(15,23,42,0.6)",
+        xaxis_title="Gene",
+        yaxis_title="Weight",
+    )
+    st.plotly_chart(fig, width="stretch")
 
 
 def main():
@@ -803,7 +883,7 @@ def main():
         st.sidebar.markdown("### Curated presets")
         preset_columns = st.sidebar.columns(len(presets))
         for (preset_name, preset_payload), column in zip(presets.items(), preset_columns):
-            if column.button(preset_name, use_container_width=True):
+            if column.button(preset_name, width="stretch"):
                 try:
                     target_sig, preset_df = apply_preset_signature(
                         preset_name,
@@ -905,7 +985,7 @@ def main():
             st.markdown("**Target QC**")
             st.dataframe(
                 pd.DataFrame(summary.items(), columns=["metric", "value"]),
-                use_container_width=True,
+                width="stretch",
             )
         info_rows: List[Tuple[str, Any]] = []
         if isinstance(target_context, dict):
@@ -916,7 +996,8 @@ def main():
         info_rows.append(("Down genes", sum(1 for w in target_sig.weights if w < 0)))
         info_rows.append(("Library", Path(str(selected_library_path)).name))
         info_df = pd.DataFrame(info_rows, columns=["attribute", "value"])
-        st.dataframe(info_df, hide_index=True, use_container_width=True)
+        info_df["value"] = info_df["value"].apply(lambda x: "" if x is None else str(x))
+        st.dataframe(info_df, hide_index=True, width="stretch")
 
     with col2:
         if ranking_df is None or ranking_df.empty:
@@ -962,7 +1043,7 @@ def main():
             st.data_editor(
                 table_df,
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
                 column_config=column_config,
                 disabled=True,
             )
@@ -1003,14 +1084,14 @@ def main():
                 data=csv_bytes,
                 file_name="scperturb_cmap_results.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
             dl_col2.download_button(
                 "Download JSON",
                 data=json_bytes,
                 file_name="scperturb_cmap_results.json",
                 mime="application/json",
-                use_container_width=True,
+                width="stretch",
             )
 
     bookmark_payload = {
@@ -1036,7 +1117,7 @@ def main():
                 data=session_bytes,
                 file_name="scperturb_cmap_session.json",
                 mime="application/json",
-                use_container_width=True,
+                width="stretch",
             )
         session_import = st.file_uploader(
             "Import session JSON", type="json", key="session_import"
@@ -1057,7 +1138,7 @@ def main():
             disabled=True,
         )
         if st.button("Apply bookmark to URL", key="bookmark_update"):
-            st.experimental_set_query_params(**{BOOKMARK_PARAM: bookmark_token})
+            st.query_params.update({BOOKMARK_PARAM: bookmark_token})
             st.toast("Bookmark added to browser URL", icon="🔗")
         st.code(f"?{BOOKMARK_PARAM}={bookmark_token}")
 
@@ -1065,10 +1146,10 @@ def main():
     ranking_ready = ranking_df is not None and not ranking_df.empty
     if ranking_ready:
         e_df = moa_enrichment(ranking_df, top_n=50)
-        st.plotly_chart(plot_moa_enrichment_bar(e_df), use_container_width=True)
+        st.plotly_chart(plot_moa_enrichment_bar(e_df), width="stretch")
         st.plotly_chart(
             plot_moa_enrichment_heatmap(ranking_df, e_df),
-            use_container_width=True,
+            width="stretch",
         )
 
 

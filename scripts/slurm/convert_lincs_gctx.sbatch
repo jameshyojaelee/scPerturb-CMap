@@ -124,7 +124,7 @@ scperturb-cmap prepare-lincs \
 set +x
 
 # Validate output
-python "$SUBMIT_DIR/scripts/validate_parquet_dataset.py" \
+python "$SUBMIT_DIR/scripts/validators/validate_parquet_dataset.py" \
   --dataset "$OUT_DIR" \
   --partition "$PARTITION_COL" \
   --full \

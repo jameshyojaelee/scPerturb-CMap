@@ -42,6 +42,7 @@ def plot_moa_enrichment_bar(enrich_df: pd.DataFrame, k: int = 12) -> go.Figure:
         labels={"neglog10p": "-log10(p)", "moa": "MOA"},
         title="MOA enrichment among top hits",
     )
+    fig.update_traces(marker_color="#38bdf8", marker_line_color="#0f172a", marker_line_width=1.2)
     if all(c in df.columns for c in ["top", "rest", "odds_ratio", "p_value"]):
         custom_columns = [
             df["top"].to_numpy(),
@@ -76,7 +77,13 @@ def plot_moa_enrichment_bar(enrich_df: pd.DataFrame, k: int = 12) -> go.Figure:
         custom_data = np.column_stack(custom_columns)
         hover_template = "<br>".join(hover_lines) + "<extra></extra>"
         fig.update_traces(hovertemplate=hover_template, customdata=custom_data)
-    fig.update_layout(margin=dict(l=10, r=10, t=40, b=10), height=420)
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(15,23,42,0.7)",
+        margin=dict(l=10, r=10, t=40, b=10),
+        height=420,
+    )
     return fig
 
 
@@ -212,11 +219,20 @@ def plot_moa_enrichment_heatmap(
         z=pivot.to_numpy(),
         x=pivot.columns.tolist(),
         y=pivot.index.tolist(),
-        colorscale="RdBu_r",
+        colorscale=[
+            [0.0, "#ef4444"],
+            [0.5, "#1f2937"],
+            [1.0, "#22d3ee"],
+        ],
         colorbar_title="Mean score",
         customdata=custom_data,
         hovertemplate=hover_template,
     )
     fig = go.Figure(data=heatmap)
-    fig.update_layout(margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(15,23,42,0.7)",
+        margin=dict(l=10, r=10, t=40, b=10),
+    )
     return fig

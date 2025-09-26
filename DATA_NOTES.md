@@ -10,11 +10,11 @@
 
 ## Commands used on HPC
 - make hpc-setup
-- sbatch scripts/download_lincs.sbatch
-- sbatch scripts/prepare_lincs.sbatch
-- sbatch scripts/make_target.sbatch
-- sbatch scripts/score_real.sbatch
-- sbatch scripts/train_metric.sbatch (optional GPU)
+- sbatch scripts/slurm/download_lincs.sbatch
+- sbatch scripts/slurm/prepare_lincs.sbatch
+- sbatch scripts/slurm/make_target.sbatch
+- sbatch scripts/slurm/score_real.sbatch
+- sbatch scripts/slurm/train_metric.sbatch (optional GPU)
 
 ## Outputs
 - data/lincs/lincs_level5_landmark_long.parquet

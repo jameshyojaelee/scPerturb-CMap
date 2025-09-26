@@ -9,6 +9,10 @@
       
       
       
+        <link rel="prev" href="../api/">
+      
+      
+        <link rel="next" href="../cases/nsclc_cd8/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -16,7 +20,7 @@
     
     
       
-        <title>HPC Setup - scPerturb-CMap</title>
+        <title>HPC - scPerturb-CMap</title>
       
     
     
@@ -94,7 +98,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              HPC Setup
+              HPC
             
           </span>
         </div>
@@ -275,6 +279,148 @@
       
   
   
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    HPC
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    HPC
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#directory-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      Directory Layout
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Setup
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-on-environments" class="md-nav__link">
+    <span class="md-ellipsis">
+      Notes on Environments
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-jobs-slurm-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Running Jobs (Slurm example)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-ingestion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Ingestion
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Ingestion">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#converting-gctx-level-5-to-long-parquet" class="md-nav__link">
+    <span class="md-ellipsis">
+      Converting GCTX Level 5 to long Parquet
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
   
   
     
@@ -286,10 +432,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
             
   
   
@@ -302,8 +448,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             Case Studies
           </label>
@@ -535,7 +681,7 @@ make hpc-setup
 </code></pre>
 <h2 id="notes-on-environments">Notes on Environments</h2>
 <ul>
-<li>The <code>Makefile</code> uses a local <code>.venv/</code> for development. The <code>scripts/setup_hpc.sh</code> script will prefer Conda/Mamba if found and create/use an env named <code>scpc</code>.</li>
+<li>The <code>Makefile</code> uses a local <code>.venv/</code> for development. The <code>scripts/hpc/setup_hpc.sh</code> script will prefer Conda/Mamba if found and create/use an env named <code>scpc</code>.</li>
 <li>If your site requires modules (e.g., <code>module load cuda/12.1</code>), load them before <code>make hpc-setup</code>.</li>
 </ul>
 <h2 id="running-jobs-slurm-example">Running Jobs (Slurm example)</h2>
@@ -602,7 +748,7 @@ Use CLI <code>score --cell-line &lt;ID&gt;</code> to leverage predicate pushdown
 <p>Option B — Submit a Slurm job (recommended on headless clusters):</p>
 <pre><code class="language-bash"># Ensure you have downloaded raw files into $SCPC_BASE/data/raw first.
 # Then submit the conversion job:
-sbatch scripts/convert_lincs_gctx.sbatch
+sbatch scripts/slurm/convert_lincs_gctx.sbatch
 
 # Optional environment overrides (set before sbatch):
 #   SCPC_BASE=/path/to/base         # default: repo root

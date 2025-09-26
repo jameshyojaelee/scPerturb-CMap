@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.0] - 2025-09-24
+## [0.1.1] - 2025-09-24
 ### Added
 - Initial public release of scPerturb-CMap.
 - CLI for LINCS ingestion, target construction, scoring, training, and UI.
@@ -10,6 +10,5 @@ All notable changes to this project will be documented in this file.
 - Streamlit UI with QC, MOA enrichment, and exports.
 - Acceptance harness and tests.
 
-## [0.1.1] - 2025-09-24
 ### Fixed
 - pyproject.toml PEP 621 fields (remove invalid inline urls table and extraneous field) for CI build.
