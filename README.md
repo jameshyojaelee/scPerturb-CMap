@@ -8,7 +8,7 @@ Under the hood, scPerturb-CMap blends a fast statistical baseline with a learned
 
 Why translational teams rely on scPerturb-CMap:
 1. **Targets the “undruggable.”** Rare states no longer disappear in bulk averages; ranking is driven by the exact cluster causing pathology.
-2. **Leverages a decade of data.** Mine the public L1000 archive instead of funding bespoke single-cell perturbation experiments.
+2. **Leverages a decade of data.** Mine the public L1000 archive before expensive single-cell perturbation experiments.
 3. **Accelerates repurposing.** Connect patient-derived or experimental signatures to approved/investigational compounds with immediate readouts for bench validation.
 4. **Democratises analysis.** Fits existing workflows (AnnData `.h5ad`, curated gene lists, LINCS Parquet), and ships with CLI, Python API, and Streamlit UI for mixed computational/experimental teams.
 
