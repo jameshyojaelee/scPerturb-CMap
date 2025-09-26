@@ -3,6 +3,8 @@
 .env
 .envrc
 .python-version
+/.github/
+/.github/**
 .hydra/
 
 # Python caches
