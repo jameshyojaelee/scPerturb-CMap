@@ -26,7 +26,7 @@ Local useful targets
 - `make demo` – synthesize demo data and run baseline scoring
 - `make ui` – launch the Streamlit demo app
 - `make train` – run a small Hydra training job
-- `make evaluate` – evaluate the checkpoint in `artifacts/best.pt`
+- `make evaluate` – evaluate the checkpoint in `workspace/artifacts/best.pt`
 - `make acceptance` – run acceptance checks on demo workload
 
 Security and data
@@ -35,4 +35,3 @@ Security and data
 
 License
 - MIT. By contributing, you agree your contributions are provided under the project license.
-

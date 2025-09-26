@@ -16,15 +16,15 @@ __pycache__/
 build/
 dist/
 *.egg-info/
-site/
+workspace/site/
 
 # Project artifacts and data outputs
-artifacts/
+workspace/artifacts/
 examples/out/
 data/
 
 # Logs
-logs/
+workspace/logs/
 *.log
 *.out
 *.err
@@ -41,12 +41,12 @@ slurm-*.err
 
 # Additional large/generated artifacts
 data/**
-artifacts/**
+workspace/**
 *.sbatch.out
 *.out
 *.log
 *.pyc
 __pycache__/
 # Local notes
-notes/
+workspace/notes/
 250924 prompts.md

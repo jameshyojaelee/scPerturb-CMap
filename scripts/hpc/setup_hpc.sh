@@ -19,14 +19,16 @@ echo "Data base:  $DATA_BASE"
 
 # Create directory structure
 echo "Creating directory structure..."
-mkdir -p "$DATA_BASE"/{data/raw,data/lincs,data/sc,artifacts,examples/out}
+mkdir -p "$DATA_BASE"/{data/raw,data/lincs,data/sc,workspace/artifacts,workspace/logs,workspace/site,examples/out}
 
 # Show directory tree
 echo "Created directories:"
 echo "$DATA_BASE/data/raw/"
 echo "$DATA_BASE/data/lincs/"
 echo "$DATA_BASE/data/sc/"
-echo "$DATA_BASE/artifacts/"
+echo "$DATA_BASE/workspace/artifacts/"
+echo "$DATA_BASE/workspace/logs/"
+echo "$DATA_BASE/workspace/site/"
 echo "$DATA_BASE/examples/out/"
 
 # Check for conda/mamba and create environment

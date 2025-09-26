@@ -30,7 +30,18 @@ from scperturb_cmap.viz.plots import (
     plot_moa_enrichment_heatmap,
 )
 
-st.set_page_config(page_title="scPerturb-CMap Demo", layout="wide")
+st.set_page_config(page_title="scPerturb-CMap Demo", page_icon="🧬", layout="wide")
+
+# Consistent Plotly theming
+px.defaults.template = "plotly_dark"
+# Set default discrete color sequence for consistency across charts
+px.defaults.color_discrete_sequence = [
+    "#38bdf8",
+    "#6366f1",
+    "#f97316",
+    "#22d3ee",
+    "#a78bfa",
+]
 
 UI_PRESETS_PATH = Path("examples/data/ui_presets.json")
 BOOKMARK_PARAM = "bookmark"
@@ -749,7 +760,6 @@ def sidebar_controls(
             "Top K",
             min_value=10,
             max_value=200,
-            value=int(st.session_state.get("top_k", 50)),
             step=10,
             key="top_k",
         )
@@ -759,7 +769,6 @@ def sidebar_controls(
             "Blend (metric)",
             min_value=0.0,
             max_value=1.0,
-            value=float(st.session_state.get("blend", 0.5)),
             step=0.05,
             key="blend",
             disabled=(method != "metric"),
@@ -828,7 +837,6 @@ def plot_signature(ts: TargetSignature, max_genes: int = 10):
         title="Target signature preview",
     )
     fig.update_layout(
-        template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(15,23,42,0.6)",
         xaxis_title="Gene",
@@ -920,7 +928,7 @@ def main():
     blend_arg = float(blend) if blend is not None else 0.5
 
     if method == "metric" and not model_file:
-        default_ckpt = os.environ.get("SCPC_MODEL", "artifacts/best.pt")
+        default_ckpt = os.environ.get("SCPC_MODEL", "workspace/artifacts/best.pt")
         if os.path.exists(default_ckpt):
             model_file = default_ckpt
             model_label = os.path.basename(default_ckpt)

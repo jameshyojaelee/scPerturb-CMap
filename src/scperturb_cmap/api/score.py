@@ -210,8 +210,8 @@ def rank_drugs(
             m = max(1, len(p))
             order = pd.Series(p).sort_values().index.to_numpy()
             ranks = pd.Series(range(1, m + 1), index=order).sort_index().to_numpy()
-            q = (p * m / ranks).clip(upper=1.0)
-            q_sorted = q[order]
+            q = pd.Series(p * m / ranks).clip(upper=1.0)
+            q_sorted = q.to_numpy()[order]
             for i in range(m - 2, -1, -1):
                 q_sorted[i] = min(q_sorted[i], q_sorted[i + 1])
             q_final = pd.Series(index=order, data=q_sorted).sort_index().to_numpy()
@@ -249,8 +249,8 @@ def rank_drugs(
             m = max(1, len(p))
             order = pd.Series(p).sort_values().index.to_numpy()
             ranks = pd.Series(range(1, m + 1), index=order).sort_index().to_numpy()
-            q = (p * m / ranks).clip(upper=1.0)
-            q_sorted = q[order]
+            q = pd.Series(p * m / ranks).clip(upper=1.0)
+            q_sorted = q.to_numpy()[order]
             for i in range(m - 2, -1, -1):
                 q_sorted[i] = min(q_sorted[i], q_sorted[i + 1])
             q_final = pd.Series(index=order, data=q_sorted).sort_index().to_numpy()

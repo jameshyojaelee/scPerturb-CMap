@@ -6,7 +6,7 @@ The Broad Connectivity Map (LINCS L1000) captures millions of empirically measur
 
 Under the hood, scPerturb-CMap blends a fast statistical baseline with a learned DualEncoder metric model trained on known inversion pairs. This machine learning component learns embeddings for targets and perturbations and is blended with the baseline at inference to sharpen ranking accuracy.
 
-Why translational teams rely on scPerturb-CMap:
+Why use scPerturb-CMap:
 1. **Targets the “undruggable.”** Rare states no longer disappear in bulk averages; ranking is driven by the exact cluster causing pathology.
 2. **Leverages a decade of data.** Mine the public L1000 archive before expensive single-cell perturbation experiments.
 3. **Accelerates repurposing.** Connect patient-derived or experimental signatures to approved/investigational compounds with immediate readouts for bench validation.

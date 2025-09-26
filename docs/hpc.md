@@ -16,7 +16,8 @@ You can keep data and outputs outside the repo by setting `SCPC_BASE`. The setup
 - `data/raw/` – raw downloads
 - `data/lincs/` – LINCS tables (parquet/csv)
 - `data/sc/` – single-cell inputs (e.g., `.h5ad`)
-- `artifacts/` – model checkpoints and metrics
+- `workspace/artifacts/` – model checkpoints and metrics
+- `workspace/logs/` – job logs and diagnostics (optional)
 - `examples/out/` – quickstart outputs
 
 Setup

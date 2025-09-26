@@ -261,7 +261,7 @@ def recall_at_k(
     return hits / max(1, len(left_ids))
 
 
-@hydra_main(config_path="../../../conf", config_name="train", version_base=None)
+@hydra_main(config_path="../../../configs", config_name="train", version_base=None)
 def run(cfg: OmegaConf) -> None:
     # Merge defaults
     tc = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg)

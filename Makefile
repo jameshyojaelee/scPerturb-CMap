@@ -37,7 +37,7 @@ demo:
 		--output examples/out/results.parquet
 
 evaluate:
-	$(PY) -c "from scperturb_cmap.models.evaluate import evaluate_checkpoint; import json; print(json.dumps(evaluate_checkpoint('artifacts/best.pt')))"
+	$(PY) -c "from scperturb_cmap.models.evaluate import evaluate_checkpoint; import json; print(json.dumps(evaluate_checkpoint('workspace/artifacts/best.pt')))"
 
 acceptance:
 	$(PY) scripts/check_acceptance.py

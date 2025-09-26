@@ -230,7 +230,7 @@ def check_metric_improves() -> dict:
         check=True,
     )
 
-    ckpt = torch.load("artifacts/best.pt", map_location=device_t)
+    ckpt = torch.load("workspace/artifacts/best.pt", map_location=device_t)
     trained_input_dim = int(ckpt.get("config", {}).get("input_dim", input_dim))
     model = DualEncoder(input_dim=trained_input_dim, embed_dim=64)
     model.load_state_dict(ckpt["state_dict"])

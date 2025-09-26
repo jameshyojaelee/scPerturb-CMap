@@ -19,7 +19,7 @@ PROJ="/gpfs/commons/home/jameslee/scPerturb-CMap"
 LINCS="$PROJ/data/lincs/lincs_level5_landmark_long.parquet"
 TARGET_JSON="$PROJ/examples/out/target_sig_real.json"
 FILTERED_TARGET_JSON="$PROJ/examples/out/target_sig_filtered_metric.json"
-MODEL="$PROJ/artifacts/best.pt"
+MODEL="$PROJ/workspace/artifacts/best.pt"
 OUT="$PROJ/examples/out/results_metric.parquet"
 
 echo "[score-metric] target_json=$TARGET_JSON lincs=$LINCS model=$MODEL"

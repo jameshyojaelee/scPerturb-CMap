@@ -20,11 +20,10 @@
 - data/lincs/lincs_level5_landmark_long.parquet
 - examples/out/target_sig_real.parquet
 - examples/out/results_real.parquet
-- artifacts/best.pt
-- artifacts/report.json
+- workspace/artifacts/best.pt
+- workspace/artifacts/report.json
 
 ## Notes and caveats
 - Gene symbol harmonization strategy
 - Any filters applied to cell lines or doses
 - Known limitations or TODOs
-
