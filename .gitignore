@@ -3,6 +3,7 @@
 .env
 .envrc
 .python-version
+.hydra/
 
 # Python caches
 __pycache__/

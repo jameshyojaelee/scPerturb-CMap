@@ -108,7 +108,13 @@ def apply_theme() -> None:
         [data-testid="stSidebar"] * {
             color: var(--scpc-text) !important;
         }
-        .stMarkdown, .stText, .stTextInput, .stNumberInput, .stSelectbox, .stDataFrame, .stDataEditor {
+        .stMarkdown,
+        .stText,
+        .stTextInput,
+        .stNumberInput,
+        .stSelectbox,
+        .stDataFrame,
+        .stDataEditor {
             color: var(--scpc-text) !important;
         }
         .stTextInput > div > div > input,
@@ -665,7 +671,10 @@ def sidebar_controls(
         key="target_mode",
     )
 
-    target_context: Dict[str, Any] = {"mode": target_mode, "preset": st.session_state.get("active_preset")}
+    target_context: Dict[str, Any] = {
+        "mode": target_mode,
+        "preset": st.session_state.get("active_preset"),
+    }
 
     if target_mode == "+ Gene lists":
         up_text = st.sidebar.text_area("Up genes (one per line)", key="up_genes_text")
@@ -691,13 +700,20 @@ def sidebar_controls(
             )
             labels = adata.obs[cluster_key].astype(str)
             cluster_options = sorted(labels.unique().tolist())
-            st.session_state.setdefault("target_cluster_label", cluster_options[0] if cluster_options else "")
+            st.session_state.setdefault(
+                "target_cluster_label",
+                cluster_options[0] if cluster_options else "",
+            )
             cluster = st.sidebar.selectbox(
                 "Cluster",
                 cluster_options,
                 key="target_cluster_label",
             )
-            ref_mode = st.sidebar.radio("Reference", ["rest", "cluster"], key="target_reference_mode")
+            ref_mode = st.sidebar.radio(
+                "Reference",
+                ["rest", "cluster"],
+                key="target_reference_mode",
+            )
             reference = "rest"
             ref_cluster = None
             if ref_mode == "cluster":
@@ -999,7 +1015,8 @@ def main():
         if isinstance(target_context, dict):
             if target_context.get("preset"):
                 info_rows.append(("Preset", target_context["preset"]))
-            info_rows.append(("Mode", target_context.get("mode", st.session_state.get("target_mode"))))
+            mode_hint = target_context.get("mode", st.session_state.get("target_mode"))
+            info_rows.append(("Mode", mode_hint))
         info_rows.append(("Up genes", sum(1 for w in target_sig.weights if w > 0)))
         info_rows.append(("Down genes", sum(1 for w in target_sig.weights if w < 0)))
         info_rows.append(("Library", Path(str(selected_library_path)).name))
@@ -1009,7 +1026,9 @@ def main():
 
     with col2:
         if ranking_df is None or ranking_df.empty:
-            st.info("No results available yet. Adjust the target or scoring parameters to recompute.")
+            st.info(
+                "No results available yet. Adjust the target or scoring parameters to recompute."
+            )
         else:
             base_columns = [
                 "signature_id",
@@ -1030,7 +1049,9 @@ def main():
                 for c in ranking_df.columns
                 if c not in base_columns and c not in external_cols
             ]
-            ordered_cols = [c for c in base_columns if c in ranking_df.columns] + external_cols + other_cols
+            ordered_cols = [
+                c for c in base_columns if c in ranking_df.columns
+            ] + external_cols + other_cols
             table_df = ranking_df[ordered_cols]
             table_df, link_config = prepare_link_columns(table_df)
             column_config: Dict[str, Any] = {

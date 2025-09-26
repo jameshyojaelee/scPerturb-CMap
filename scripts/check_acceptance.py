@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Dict, List
@@ -9,6 +11,10 @@ from typing import Dict, List
 import numpy as np
 import pandas as pd
 import torch
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.data.lincs_loader import load_lincs_long
@@ -24,7 +30,7 @@ OUT_DIR = Path("examples/out")
 def ensure_demo() -> pd.DataFrame:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     # Ensure demo LINCS exists; generate via print_demo_stats (which also writes parquet)
-    from print_demo_stats import ensure_lincs_demo
+    from scripts.demo.print_demo_stats import ensure_lincs_demo
 
     lincs_path = ensure_lincs_demo()
     return load_lincs_long(str(lincs_path))
@@ -212,11 +218,15 @@ def check_metric_improves() -> dict:
     r0 = compute_recall(m0, vectors, left_ids, pos_map, device, k=5)
 
     # Train with real-data pipeline
-    import subprocess
+    artifacts_dir = Path("workspace") / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    best_ckpt_path = artifacts_dir / "best.pt"
+    if best_ckpt_path.exists():
+        best_ckpt_path.unlink()
 
     subprocess.run(
         [
-            ".venv/bin/python",
+            sys.executable,
             "-m",
             "scperturb_cmap.models.train",
             f"pairs_path={dataset['pairs_path']}",

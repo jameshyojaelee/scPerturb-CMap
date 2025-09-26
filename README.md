@@ -34,17 +34,18 @@ The package ships with:
 ## Table of Contents
 1. [Concept Overview](#concept-overview)
 2. [Feature Highlights](#feature-highlights)
-3. [Quickstart](#quickstart)
-4. [End-to-End Workflow](#end-to-end-workflow)
-5. [Repository Layout](#repository-layout)
-6. [Command-Line Essentials](#command-line-essentials)
-7. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
-8. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
-9. [Streamlit UI](#streamlit-ui)
-10. [Acceptance & Quality Gates](#acceptance--quality-gates)
-11. [Development Workflow](#development-workflow)
-12. [HPC Notes](#hpc-notes)
-13. [License](#license)
+3. [Installation](#installation)
+4. [Quickstart](#quickstart)
+5. [End-to-End Workflow](#end-to-end-workflow)
+6. [Repository Layout](#repository-layout)
+7. [Command-Line Essentials](#command-line-essentials)
+8. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
+9. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
+10. [Streamlit UI](#streamlit-ui)
+11. [Acceptance & Quality Gates](#acceptance--quality-gates)
+12. [Development Workflow](#development-workflow)
+13. [HPC Notes](#hpc-notes)
+14. [License](#license)
 
 ---
 
@@ -80,6 +81,24 @@ Supported data contracts:
 ### How the model works
 
 I encode the target signature and each LINCS signature into a shared embedding space using a DualEncoder trained on known inversion pairs (contrastive/triplet losses). Similarity in this space estimates reversal strength. At inference, I blend the learned metric with the statistical baseline (configurable or auto-tuned) to yield robust, accurate rankings.
+
+---
+
+## Installation
+
+```bash
+pip install scperturb-cmap
+```
+
+To hack on the project locally:
+
+```bash
+git clone https://github.com/jameslee/scPerturb-CMap.git
+cd scPerturb-CMap
+make setup
+```
+
+Generated artifacts default to the `workspace/` directory (checkpoints under `workspace/artifacts/`, logs under `workspace/logs/`, documentation builds under `workspace/site/`). Point environment variables (e.g., `SCPC_MODEL`) there when running from a fresh install.
 
 ---
 

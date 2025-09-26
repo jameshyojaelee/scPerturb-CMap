@@ -261,7 +261,7 @@ def recall_at_k(
     return hits / max(1, len(left_ids))
 
 
-@hydra_main(config_path="../../../configs", config_name="train", version_base=None)
+@hydra_main(config_path="../configs", config_name="train", version_base=None)
 def run(cfg: OmegaConf) -> None:
     # Merge defaults
     tc = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg)
@@ -309,7 +309,7 @@ def run(cfg: OmegaConf) -> None:
     optim = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
 
     best_recall = -1.0
-    artifacts_dir = Path("artifacts")
+    artifacts_dir = Path("workspace") / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     metrics = {"epoch": [], "loss": [], "val_recall@k": []}
 

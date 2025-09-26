@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: scPerturb-CMap
+version: 0.2.0
+date-released: 2025-09-27
+authors:
+  - family-names: Lee
+    given-names: James Hyojae
+    email: james.hyojae.lee@gmail.com
+abstract: >-
+  scPerturb-CMap links single-cell disease signatures to experimentally
+  profiled perturbations in the Connectivity Map (LINCS L1000) to speed drug
+  repurposing analyses. Cite this software when you build on its CLI, API,
+  or metric-learning components in your work.
+repository-code: https://github.com/jameslee/scPerturb-CMap
+license: MIT
+keywords:
+  - single-cell
+  - connectivity mapping
+  - drug repurposing
