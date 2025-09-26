@@ -25,7 +25,7 @@ fi
 
 PROJ="/gpfs/commons/home/jameslee/scPerturb-CMap"
 LINCS="$PROJ/data/lincs/lincs_level5_landmark_long.parquet"
-OUT="$PROJ/artifacts"
+OUT="$PROJ/workspace/artifacts"
 
 echo "Training configuration:"
 echo "  LINCS data: $LINCS"

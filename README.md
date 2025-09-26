@@ -35,14 +35,16 @@ The package ships with:
 1. [Concept Overview](#concept-overview)
 2. [Feature Highlights](#feature-highlights)
 3. [Quickstart](#quickstart)
-4. [Command-Line Essentials](#command-line-essentials)
-5. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
-6. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
-7. [Streamlit UI](#streamlit-ui)
-8. [Acceptance & Quality Gates](#acceptance--quality-gates)
-9. [Development Workflow](#development-workflow)
-10. [HPC Notes](#hpc-notes)
-11. [License](#license)
+4. [End-to-End Workflow](#end-to-end-workflow)
+5. [Repository Layout](#repository-layout)
+6. [Command-Line Essentials](#command-line-essentials)
+7. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
+8. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
+9. [Streamlit UI](#streamlit-ui)
+10. [Acceptance & Quality Gates](#acceptance--quality-gates)
+11. [Development Workflow](#development-workflow)
+12. [HPC Notes](#hpc-notes)
+13. [License](#license)
 
 ---
 
@@ -115,6 +117,30 @@ make test
 
 ---
 
+## End-to-End Workflow
+
+1. **Prepare the library** – Convert or download LINCS L1000 signatures into a long-form Parquet/CSV table (`scperturb-cmap prepare-lincs`) and keep them under `data/lincs/` or another Arrow-friendly location.
+2. **Build a target signature** – Derive up/down weights from an AnnData object or curated gene lists using `scperturb-cmap make-target` (or the Streamlit UI). Inspect QC summaries before moving on.
+3. **Score compounds** – Run `scperturb-cmap score` with `--method baseline` for a fast cosine+GSEA ensemble or pass `--method metric --model-path workspace/artifacts/best.pt` to blend in the trained DualEncoder.
+4. **(Optional) Train the metric model** – Supply curated inversion pairs via `scperturb-cmap train` (Hydra config under `configs/train.yaml`) to refine the DualEncoder checkpoint written to `workspace/artifacts/`.
+5. **Explore interactively** – Launch `make ui` to open the Streamlit dashboard, re-use existing targets, and export ranked hypotheses with MOA enrichment plots for bench scientists.
+6. **Validate & automate** – Use `make acceptance` for smoke tests, `make lint`/`make test` in CI, and the HPC scripts under `scripts/slurm/` for batch jobs.
+
+---
+
+## Repository Layout
+
+- `src/scperturb_cmap/` – Python package with CLI, API, data loaders, models, and Streamlit app.
+- `configs/` – Hydra configuration (e.g., `train.yaml`) consumed by training utilities.
+- `examples/` – Synthetic demo AnnData, LINCS snippets, and canned outputs for tutorials.
+- `data/` – Placeholder for large LINCS or single-cell datasets (ignored by git by default).
+- `scripts/` – Automation helpers (demo generation, validators, Slurm + HPC wrappers).
+- `docs/` & `mkdocs.yml` – Source documentation rendered via MkDocs Material.
+- `workspace/` – Consolidated runtime outputs: `workspace/artifacts/` for checkpoints, `workspace/logs/` for run logs, and `workspace/site/` for the generated MkDocs site.
+- `tests/` – Pytest suite covering IO contracts, scoring logic, and core utilities.
+
+---
+
 ## Command-Line Essentials
 
 | Command | Purpose |
@@ -145,7 +171,7 @@ scperturb-cmap train \
   batch_size=128
 ```
 
-The trainer auto-infers the gene dimension, logs metrics in `artifacts/metrics.json`, and writes `artifacts/best.pt`. You can point scoring runs to that checkpoint via `--method metric --model-path artifacts/best.pt`.
+The trainer auto-infers the gene dimension, logs metrics in `workspace/artifacts/metrics.json`, and writes `workspace/artifacts/best.pt`. You can point scoring runs to that checkpoint via `--method metric --model-path workspace/artifacts/best.pt`.
 
 ---
 
