@@ -51,3 +51,9 @@ __pycache__/
 # Local notes
 workspace/notes/
 250924 prompts.md
+
+# Hide all dotfiles/directories by default, then whitelist essentials
+.*
+!.gitignore
+!.gitattributes
+!.github/
