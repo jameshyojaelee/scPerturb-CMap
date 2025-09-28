@@ -37,15 +37,16 @@ The package ships with:
 3. [Installation](#installation)
 4. [Quickstart](#quickstart)
 5. [End-to-End Workflow](#end-to-end-workflow)
-6. [Repository Layout](#repository-layout)
-7. [Command-Line Essentials](#command-line-essentials)
-8. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
-9. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
-10. [Streamlit UI](#streamlit-ui)
-11. [Acceptance & Quality Gates](#acceptance--quality-gates)
-12. [Development Workflow](#development-workflow)
-13. [HPC Notes](#hpc-notes)
-14. [License](#license)
+6. [Reference Figures](#reference-figures)
+7. [Repository Layout](#repository-layout)
+8. [Command-Line Essentials](#command-line-essentials)
+9. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
+10. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
+11. [Streamlit UI](#streamlit-ui)
+12. [Acceptance & Quality Gates](#acceptance--quality-gates)
+13. [Development Workflow](#development-workflow)
+14. [HPC Notes](#hpc-notes)
+15. [License](#license)
 
 ---
 
@@ -64,6 +65,10 @@ Supported data contracts:
 - **Target** (`TargetSignature` JSON): `{"genes": [...], "weights": [...], "metadata": {...}}`
 - **LINCS long** (Parquet/CSV/TSV): `signature_id, compound, cell_line, gene_symbol, score` (+ optional `moa, target, replicate_id`, etc.)
 - **Results** (Parquet/CSV): `signature_id, compound, cell_line, score, moa?, target?`
+
+![Fig 1. scPerturb-CMap pipeline](figs/fig1_system_diagram_r.png)
+
+*Figure 1. Single-cell targets align to curated L1000 signatures before the baseline and DualEncoder branches blend into a ranked compound readout.*
 
 ---
 
@@ -144,6 +149,28 @@ make test
 4. **(Optional) Train the metric model** – Supply curated inversion pairs via `scperturb-cmap train` (Hydra config under `configs/train.yaml`) to refine the DualEncoder checkpoint written to `workspace/artifacts/`.
 5. **Explore interactively** – Launch `make ui` to open the Streamlit dashboard, re-use existing targets, and export ranked hypotheses with MOA enrichment plots for bench scientists.
 6. **Validate & automate** – Use `make acceptance` for smoke tests, `make lint`/`make test` in CI, and the HPC scripts under `scripts/slurm/` for batch jobs.
+
+---
+
+## Reference Figures
+
+**Recall@50 by cell line**
+
+![Fig 2. Recall@50 by cell line](figs/fig2_recall_by_cell_line_r.png)
+
+*Figure 2. Baseline connectivity (blue) versus the blended metric model (orange) across reference cell lines with 95% confidence intervals.*
+
+**MoA enrichment landscape**
+
+![Fig 3. MoA enrichment bar chart](figs/fig3_moa_enrichment_r.png)
+
+*Figure 3. Mechanism-of-action enrichment highlighting up- and down-regulated classes by log2 change and significance.*
+
+**Case study ranking trace**
+
+![Fig 4. Case study ranked compounds](figs/fig4_case_study_rank_plot_r.png)
+
+*Figure 4. Blended connectivity scores for the top-ranked compounds in the NSCLC case study, with annotations for the leading hits.*
 
 ---
 
