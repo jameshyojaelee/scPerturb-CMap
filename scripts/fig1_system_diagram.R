@@ -60,8 +60,8 @@ boxes <- data.frame(
   ),
   xmin = c(0.2, 3.6, 7.6, 7.6, 12.0),
   xmax = c(3.4, 7.2, 10.8, 10.8, 14.8),
-  ymin = c(3.6, 3.4, 6.2, 0.8, 3.5),
-  ymax = c(5.8, 5.8, 7.9, 2.6, 5.9),
+  ymin = c(3.6, 3.4, 6.0, 0.6, 3.5),
+  ymax = c(5.8, 5.8, 8.1, 2.8, 5.9),
   fill = factor(c("Input", "Reference", "Analysis", "Analysis", "Output"),
                 levels = c("Input", "Reference", "Analysis", "Output"))
 )
@@ -69,9 +69,9 @@ boxes$xc <- (boxes$xmin + boxes$xmax) / 2
 boxes$yc <- (boxes$ymin + boxes$ymax) / 2
 
 arrows <- data.frame(
-  x = c(boxes$xmax[1] + 0.15, boxes$xc[2], boxes$xc[2], boxes$xmax[3] + 0.2, boxes$xmax[4] + 0.2),
+  x = c(boxes$xmax[1] + 0.05, boxes$xc[2], boxes$xc[2], boxes$xmax[3] + 0.2, boxes$xmax[4] + 0.2),
   y = c(boxes$yc[1], boxes$ymax[2] - 0.15, boxes$ymin[2] + 0.15, boxes$yc[3], boxes$yc[4]),
-  xend = c(boxes$xmin[2] - 0.2, boxes$xmin[3] - 0.55, boxes$xmin[4] - 0.55, boxes$xmin[5] - 0.2, boxes$xmin[5] - 0.2),
+  xend = c(boxes$xmin[2] - 0.05, boxes$xmin[3] - 0.55, boxes$xmin[4] - 0.55, boxes$xmin[5] - 0.2, boxes$xmin[5] - 0.2),
   yend = c(boxes$yc[2], boxes$yc[3] + 0.25, boxes$yc[4] - 0.25, boxes$yc[5] + 1.05, boxes$yc[5] - 1.05),
   label = c("Align genes", "Baseline input", "Metric input", "Blend", "Blend"),
   offset_x = c(0.0, -0.45, -0.45, 0.55, 0.55),
