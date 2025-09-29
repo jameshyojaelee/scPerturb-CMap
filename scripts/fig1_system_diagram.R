@@ -58,10 +58,10 @@ boxes <- data.frame(
     "DualEncoder metric\nTrain inversion pairs\nNT-Xent / Triplet",
     "Blended score & ranking\nRanked compounds + MoA"
   ),
-  xmin = c(0.4, 3.8, 8.0, 8.0, 12.0),
-  xmax = c(3.0, 6.8, 10.0, 10.0, 14.0),
-  ymin = c(3.8, 3.6, 6.4, 1.0, 3.7),
-  ymax = c(5.6, 5.6, 7.7, 2.4, 5.8),
+  xmin = c(0.2, 3.6, 7.6, 7.6, 12.0),
+  xmax = c(3.4, 7.2, 10.8, 10.8, 14.8),
+  ymin = c(3.6, 3.4, 6.2, 0.8, 3.5),
+  ymax = c(5.8, 5.8, 7.9, 2.6, 5.9),
   fill = factor(c("Input", "Reference", "Analysis", "Analysis", "Output"),
                 levels = c("Input", "Reference", "Analysis", "Output"))
 )
@@ -69,13 +69,13 @@ boxes$xc <- (boxes$xmin + boxes$xmax) / 2
 boxes$yc <- (boxes$ymin + boxes$ymax) / 2
 
 arrows <- data.frame(
-  x = c(boxes$xmax[1] + 0.15, boxes$xc[2], boxes$xc[2], boxes$xmax[3] + 0.15, boxes$xmax[4] + 0.15),
-  y = c(boxes$yc[1], boxes$ymax[2] - 0.1, boxes$ymin[2] + 0.1, boxes$yc[3], boxes$yc[4]),
-  xend = c(boxes$xmin[2] - 0.15, boxes$xmin[3] - 0.5, boxes$xmin[4] - 0.5, boxes$xmin[5] - 0.15, boxes$xmin[5] - 0.15),
-  yend = c(boxes$yc[2], boxes$yc[3] + 0.25, boxes$yc[4] - 0.25, boxes$yc[5] + 1.0, boxes$yc[5] - 1.0),
+  x = c(boxes$xmax[1] + 0.15, boxes$xc[2], boxes$xc[2], boxes$xmax[3] + 0.2, boxes$xmax[4] + 0.2),
+  y = c(boxes$yc[1], boxes$ymax[2] - 0.15, boxes$ymin[2] + 0.15, boxes$yc[3], boxes$yc[4]),
+  xend = c(boxes$xmin[2] - 0.2, boxes$xmin[3] - 0.55, boxes$xmin[4] - 0.55, boxes$xmin[5] - 0.2, boxes$xmin[5] - 0.2),
+  yend = c(boxes$yc[2], boxes$yc[3] + 0.25, boxes$yc[4] - 0.25, boxes$yc[5] + 1.05, boxes$yc[5] - 1.05),
   label = c("Align genes", "Baseline input", "Metric input", "Blend", "Blend"),
-  offset_x = c(0.0, -0.4, -0.4, 0.5, 0.5),
-  offset_y = c(0.7, 0.75, -0.75, 1.0, -1.0)
+  offset_x = c(0.0, -0.45, -0.45, 0.55, 0.55),
+  offset_y = c(0.75, 0.8, -0.8, 1.15, -1.15)
 )
 
 palette <- c("Input" = "#7EA9E1", "Reference" = "#F4C27A", "Analysis" = "#90D1C2", "Output" = "#F5A6A6")
@@ -87,14 +87,14 @@ plot_df <- ggplot(boxes) +
              aes(x = x, y = y, xend = xend, yend = yend),
              curvature = 0.18, colour = "#2F3E46", linewidth = 0.8,
              arrow = arrow(length = unit(0.25, "cm"), type = "closed", angle = 25)) +
-  geom_text(aes(x = xc, y = yc, label = label), lineheight = 0.96,
-            family = "Helvetica", fontface = "bold", size = 3.5, colour = "#102542") +
+  geom_text(aes(x = xc, y = yc, label = label), lineheight = 0.88,
+            family = "Helvetica", fontface = "bold", size = 2.8, colour = "#102542") +
   geom_label(data = arrows,
              aes(x = (x + xend) / 2 + offset_x, y = (y + yend) / 2 + offset_y, label = label),
              family = "Helvetica", size = 3.0, fill = "#F7F7F7", colour = "#102542",
              linewidth = 0, label.padding = unit(0.12, "lines")) +
   scale_fill_manual(values = palette, name = NULL) +
-  coord_equal(xlim = c(-0.5, 14.5), ylim = c(0.2, 8.2)) +
+  coord_equal(xlim = c(-0.6, 15.0), ylim = c(-0.4, 8.4)) +
   labs(title = "Fig 1. scPerturb-CMap pipeline") +
   theme_minimal(base_size = 12) +
   theme(
@@ -104,11 +104,11 @@ plot_df <- ggplot(boxes) +
     axis.text = element_blank(),
     axis.title = element_blank(),
     panel.grid = element_blank(),
-    plot.margin = margin(12, 12, 28, 12)
+    plot.margin = margin(12, 12, 38, 12)
   ) +
-  annotate("text", x = 7.8, y = 0.9,
+  annotate("text", x = 7.2, y = -0.05,
            label = "scPerturb-CMap: targets align to L1000 signatures;\nBaseline and DualEncoder scores blend to rank compounds.",
-           size = 3.4, colour = "#1B263B", family = "Helvetica", lineheight = 0.98)
+           size = 2.8, colour = "#1B263B", family = "Helvetica", lineheight = 0.95)
 
 ensure_parent(output_png)
 ensure_parent(output_pdf)
