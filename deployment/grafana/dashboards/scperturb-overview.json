@@ -1,0 +1,167 @@
+{
+  "dashboard": {
+    "title": "scPerturb-CMap Overview",
+    "tags": ["scperturb-cmap", "overview"],
+    "timezone": "browser",
+    "editable": true,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Request Rate",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"scperturb-api\"}[5m])",
+            "legendFormat": "{{method}} {{path}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "API Response Time (95th percentile)",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"scperturb-api\"}[5m]))",
+            "legendFormat": "{{method}} {{path}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Response Time"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"scperturb-api\",status=~\"5..\"}[5m])",
+            "legendFormat": "5xx Errors"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"scperturb-api\",status=~\"4..\"}[5m])",
+            "legendFormat": "4xx Errors"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "CPU Usage",
+        "type": "graph",
+        "gridPos": {"x": 8, "y": 8, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{pod=~\"scperturb-cmap.*\"}[5m])",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "CPU"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Memory Usage",
+        "type": "graph",
+        "gridPos": {"x": 16, "y": 8, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{pod=~\"scperturb-cmap.*\"} / container_spec_memory_limit_bytes{pod=~\"scperturb-cmap.*\"}",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Memory"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Active Connections",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 16, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(pg_stat_database_numbackends{datname=\"scperturb_cmap\"})"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 7,
+        "title": "Worker Queue Length",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 16, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "celery_queue_length{queue=\"default\"}"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Cache Hit Rate",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))",
+            "legendFormat": "Hit Rate"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Hit Rate"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Scoring Tasks Completed",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(celery_task_succeeded_total{task=\"scperturb_cmap.score\"}[5m])",
+            "legendFormat": "Successful"
+          },
+          {
+            "expr": "rate(celery_task_failed_total{task=\"scperturb_cmap.score\"}[5m])",
+            "legendFormat": "Failed"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Data Transfer",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(container_network_receive_bytes_total{pod=~\"scperturb-cmap.*\"}[5m])",
+            "legendFormat": "RX {{pod}}"
+          },
+          {
+            "expr": "rate(container_network_transmit_bytes_total{pod=~\"scperturb-cmap.*\"}[5m])",
+            "legendFormat": "TX {{pod}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "Bps", "label": "Bytes/sec"}
+        ]
+      }
+    ]
+  }
+}

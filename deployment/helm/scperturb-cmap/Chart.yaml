@@ -1,0 +1,26 @@
+apiVersion: v2
+name: scperturb-cmap
+description: A Helm chart for deploying scPerturb-CMap connectivity mapping platform
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+
+keywords:
+  - bioinformatics
+  - drug-repurposing
+  - single-cell
+  - connectivity-map
+
+maintainers:
+  - name: scPerturb-CMap Team
+    email: support@scperturb-cmap.org
+
+home: https://github.com/jameslee/scPerturb-CMap
+sources:
+  - https://github.com/jameslee/scPerturb-CMap
+
+dependencies: []
+
+annotations:
+  category: Bioinformatics
+  licenses: MIT

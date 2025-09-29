@@ -1,0 +1,102 @@
+{{- if .Values.worker.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "scperturb-cmap.fullname" . }}-worker
+  labels:
+    {{- include "scperturb-cmap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  {{- if not .Values.worker.autoscaling.enabled }}
+  replicas: {{ .Values.worker.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "scperturb-cmap.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "scperturb-cmap.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "scperturb-cmap.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      containers:
+      - name: worker
+        image: {{ include "scperturb-cmap.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["celery"]
+        args:
+          - "-A"
+          - "scperturb_cmap.worker"
+          - "worker"
+          - "--loglevel=info"
+          - "--concurrency={{ .Values.worker.env | first | pluck "value" | first | default "2" }}"
+        env:
+        {{- range .Values.worker.env }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        - name: CELERY_BROKER_URL
+          value: {{ include "scperturb-cmap.redisUrl" . | quote }}
+        - name: CELERY_RESULT_BACKEND
+          value: {{ include "scperturb-cmap.redisUrl" . | quote }}
+        - name: SCPC_DATA_DIR
+          value: "/data"
+        - name: SCPC_CACHE_DIR
+          value: "/app/workspace/cache"
+        resources:
+          {{- toYaml .Values.worker.resources | nindent 10 }}
+        volumeMounts:
+        - name: lincs-data
+          mountPath: {{ .Values.persistence.lincsData.mountPath }}
+          readOnly: true
+        - name: model-artifacts
+          mountPath: {{ .Values.persistence.modelArtifacts.mountPath }}
+          readOnly: true
+        - name: cache
+          mountPath: {{ .Values.persistence.cache.mountPath }}
+      volumes:
+      - name: lincs-data
+        {{- if .Values.persistence.lincsData.existingClaim }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.lincsData.existingClaim }}
+        {{- else }}
+        persistentVolumeClaim:
+          claimName: {{ include "scperturb-cmap.fullname" . }}-lincs-data
+        {{- end }}
+      - name: model-artifacts
+        {{- if .Values.persistence.modelArtifacts.existingClaim }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.modelArtifacts.existingClaim }}
+        {{- else }}
+        persistentVolumeClaim:
+          claimName: {{ include "scperturb-cmap.fullname" . }}-model-artifacts
+        {{- end }}
+      - name: cache
+        {{- if .Values.persistence.cache.existingClaim }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.persistence.cache.existingClaim }}
+        {{- else }}
+        persistentVolumeClaim:
+          claimName: {{ include "scperturb-cmap.fullname" . }}-cache
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

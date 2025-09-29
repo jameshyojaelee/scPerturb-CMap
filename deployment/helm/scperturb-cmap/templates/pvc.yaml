@@ -1,0 +1,53 @@
+{{- if and .Values.persistence.lincsData.enabled (not .Values.persistence.lincsData.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "scperturb-cmap.fullname" . }}-lincs-data
+  labels:
+    {{- include "scperturb-cmap.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.lincsData.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.lincsData.size }}
+  {{- if .Values.persistence.lincsData.storageClass }}
+  storageClassName: {{ .Values.persistence.lincsData.storageClass }}
+  {{- end }}
+---
+{{- end }}
+{{- if and .Values.persistence.modelArtifacts.enabled (not .Values.persistence.modelArtifacts.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "scperturb-cmap.fullname" . }}-model-artifacts
+  labels:
+    {{- include "scperturb-cmap.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.modelArtifacts.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.modelArtifacts.size }}
+  {{- if .Values.persistence.modelArtifacts.storageClass }}
+  storageClassName: {{ .Values.persistence.modelArtifacts.storageClass }}
+  {{- end }}
+---
+{{- end }}
+{{- if and .Values.persistence.cache.enabled (not .Values.persistence.cache.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "scperturb-cmap.fullname" . }}-cache
+  labels:
+    {{- include "scperturb-cmap.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.cache.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.cache.size }}
+  {{- if .Values.persistence.cache.storageClass }}
+  storageClassName: {{ .Values.persistence.cache.storageClass }}
+  {{- end }}
+{{- end }}

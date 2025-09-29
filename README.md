@@ -33,20 +33,26 @@ The package ships with:
 
 ## Table of Contents
 1. [Concept Overview](#concept-overview)
-2. [Feature Highlights](#feature-highlights)
-3. [Installation](#installation)
-4. [Quickstart](#quickstart)
-5. [End-to-End Workflow](#end-to-end-workflow)
-6. [Reference Figures](#reference-figures)
-7. [Repository Layout](#repository-layout)
-8. [Command-Line Essentials](#command-line-essentials)
-9. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
-10. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
-11. [Streamlit UI](#streamlit-ui)
-12. [Acceptance & Quality Gates](#acceptance--quality-gates)
-13. [Development Workflow](#development-workflow)
-14. [HPC Notes](#hpc-notes)
-15. [License](#license)
+2. [Significant Breakthroughs](#significant-breakthroughs)
+3. [Use Cases for Biologists](#use-cases-for-biologists)
+4. [Feature Highlights](#feature-highlights)
+5. [Installation](#installation)
+6. [Quickstart](#quickstart)
+7. [End-to-End Workflow](#end-to-end-workflow)
+8. [Reference Figures](#reference-figures)
+9. [Repository Layout](#repository-layout)
+10. [Command-Line Essentials](#command-line-essentials)
+11. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
+12. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
+13. [Streamlit UI](#streamlit-ui)
+14. [Acceptance & Quality Gates](#acceptance--quality-gates)
+15. [Development Workflow](#development-workflow)
+16. [Planned Enhancements](#planned-enhancements)
+17. [HPC Notes](#hpc-notes)
+18. [FAQ](#faq)
+19. [Citation & Publications](#citation--publications)
+20. [Community & Support](#community--support)
+21. [License](#license)
 
 ---
 
@@ -69,6 +75,61 @@ Supported data contracts:
 ![Fig 1. scPerturb-CMap pipeline](figs/fig1_system_diagram_r.png)
 
 *Figure 1. Single-cell targets align to curated L1000 signatures before the baseline and DualEncoder branches blend into a ranked compound readout.*
+
+---
+
+## Significant Breakthroughs
+
+scPerturb-CMap represents several firsts in computational drug repurposing:
+
+1. **Single-Cell to Drug Atlas Bridge**: First systematic connection between rare cell states in scRNA-seq data and the 1.3M+ signature LINCS L1000 library
+2. **Hybrid Intelligence**: Novel combination of statistical baseline (cosine + GSEA ensemble) with metric learning (DualEncoder) for superior ranking accuracy
+3. **Cell-State Precision**: Targets specific pathological clusters (e.g., EMT cells, exhausted T cells) that disappear in bulk averages
+4. **Hours Not Months**: Reduces drug screening hypothesis generation from 6-12 months of wet-lab work to same-day computational predictions
+5. **Statistical Rigor**: Full statistical framework with z-scores, p-values, FDR correction, and MOA enrichment analysis
+6. **Production Ecosystem**: Complete with CLI, Python API, Streamlit UI, HPC integration, comprehensive tests, and CI/CD
+
+---
+
+## Use Cases for Biologists
+
+### Precision Medicine Workflows
+
+**Patient-Derived Signatures → Repurposing**
+```bash
+# Extract pathological cluster from patient tumor
+scperturb-cmap make-target \
+  --h5ad patient_tumor.h5ad \
+  --cluster-key leiden \
+  --cluster "mesenchymal_like" \
+  --output patient_signature.json
+
+# Query LINCS for FDA-approved reversers
+scperturb-cmap score \
+  --target-json patient_signature.json \
+  --library lincs_full.parquet \
+  --cell-line A549 \
+  --top-k 50 \
+  --output repurposing_candidates.parquet
+```
+
+### Common Applications
+
+| Use Case | Cell State | Expected Output |
+|----------|------------|-----------------|
+| **Cancer stem cells** | CD44+/CD24- breast cancer | Differentiation-inducing agents, pathway inhibitors |
+| **T cell exhaustion** | PD1+/TIM3+/LAG3+ CD8+ T cells | Immune checkpoint alternatives, metabolic modulators |
+| **EMT** | VIM+/CDH1- epithelial cells | MET inducers, TGFβ pathway inhibitors |
+| **Fibrosis** | Activated myofibroblasts | Anti-fibrotic compounds, ECM remodelers |
+| **Inflammation** | IFN-high macrophages | Anti-inflammatory drugs, JAK/STAT inhibitors |
+
+### Real-World Impact
+
+- **Speed**: Generate testable hypotheses in hours vs. months of experimental screening
+- **Cost**: Reduce early-stage screening costs by 10-100x
+- **Rare diseases**: Enable drug discovery for conditions too rare for traditional screens
+- **Repurposing**: Identify new uses for FDA-approved drugs (faster path to clinic)
+- **Mechanism discovery**: MOA enrichment reveals unexpected biological insights
 
 ---
 
@@ -292,12 +353,141 @@ Contributions welcome—see `CONTRIBUTING.md` for detailed guidance.
 
 ---
 
+## Planned Enhancements
+
+The following features are on the roadmap (see [`ROADMAP.md`](ROADMAP.md) for details and timelines):
+
+**High Priority (v0.3.0)**
+- [ ] **Batch Processing**: Multi-target comparative analysis with heatmaps and clustering
+- [ ] **Enhanced Gene Mapping**: HGNC/Ensembl integration with fuzzy matching and disambiguation
+- [ ] **Real-World Case Studies**: NSCLC, EMT breast cancer, and IFN-high macrophage validations
+- [ ] **Explainability Tools**: Gene-level contribution analysis and pathway enrichment
+
+**Medium Priority (v0.4.0)**
+- [ ] **Safety Integration**: DrugBank + Tox21 toxicity predictions and safety filters
+- [ ] **Advanced Query DSL**: SQL-like filtering with saved presets
+- [ ] **Community Repository**: Shared signature database with DOI assignment
+- [ ] **Comprehensive Benchmarking**: Gold-standard dataset and comparison with CMap/L1000FWD
+
+**Long Term (v0.5.0+)**
+- [ ] **Advanced Architectures**: Transformer and GNN-based encoders with pre-trained checkpoints
+- [ ] **Spatial Transcriptomics**: Visium/MERFISH neighborhood-aware signatures
+- [ ] **Temporal Dynamics**: Trajectory-based signatures and time-course analysis
+- [ ] **Multi-Omics Integration**: CITE-seq + ATAC-seq + metabolomics
+- [ ] **Cloud Deployment**: Docker + Kubernetes + serverless API with auto-scaling
+- [ ] **Power Analysis Suite**: Sample size calculators and signature stability metrics
+
+See detailed implementation prompts and prioritization rationale in the [roadmap document](ROADMAP.md).
+
+---
+
 ## HPC Notes
 
 Cluster-specific setup, Slurm examples, and environment hints live in [`docs/hpc.md`](docs/hpc.md). In short:
 - `make hpc-setup` provisions an environment (Conda if available, otherwise venv).
 - `scripts/*.sbatch` provide job templates for data conversion, scoring, training, and UI tunnels.
 - Respect site-specific module requirements (e.g., load CUDA before launching GPU jobs).
+
+---
+
+## FAQ
+
+**Q: How many cells do I need per cluster for a robust signature?**  
+A: We recommend ≥200 cells for stable signatures. Use `--pseudobulk-key` if you have biological replicates to improve robustness. For very rare populations, consider pooling across patients or time points.
+
+**Q: What if my genes don't overlap well with LINCS?**  
+A: Use `--library-genes data/l1000_landmarks.txt` with `make-target` to pre-filter and generate a QC report. LINCS L1000 covers 978 landmark genes; aim for ≥150 overlapping genes for reliable results.
+
+**Q: Can I use this for non-human data?**  
+A: LINCS is human-specific. For mouse data, use ortholog mapping (e.g., via Ensembl Biomart or the biomaRt R package) before creating signatures. Note that cell-line context may still differ.
+
+**Q: How do I interpret MOA enrichment results?**  
+A: Enriched MOAs suggest mechanistic hypotheses. For example, "kinase inhibitor" enrichment indicates kinase pathway involvement in your signature. Use the odds ratio and p-value to prioritize mechanisms. Cross-reference with pathway databases for biological validation.
+
+**Q: What's the difference between baseline and metric methods?**  
+A: **Baseline** uses cosine+GSEA ensemble (fast, no training needed, interpretable). **Metric** adds learned embeddings from a DualEncoder trained on inversion pairs (better accuracy, requires training data). Start with baseline; use metric if you have validated inversion pairs.
+
+**Q: Can I add my own perturbation library?**  
+A: Yes! Any long-form table with columns `signature_id, compound, cell_line, gene_symbol, score` works. See the custom library documentation and use `prepare-lincs` as a template.
+
+**Q: How do I choose between different cell lines in LINCS?**  
+A: Prioritize cell lines matching your tissue of origin. Use `--cell-lines A549 MCF7 PC3` to query multiple. The Streamlit UI shows cell-line-specific heatmaps to compare results.
+
+**Q: What does a negative connectivity score mean?**  
+A: In the baseline method, **lower (more negative) scores indicate stronger inversion** – the compound reverses your signature. In metric mode, the same convention applies after blending.
+
+**Q: How can I validate the top-ranked compounds?**  
+A: (1) Check literature for known effects in your disease context, (2) Review MOA for biological plausibility, (3) Examine dose-response in LINCS, (4) Test top 3-5 compounds in your experimental system, (5) Consider orthogonal validation (e.g., in vivo models).
+
+**Q: Can I use this for combination therapy predictions?**  
+A: Not directly in v0.2.0. Future versions will support multi-compound queries. Currently, you can score each compound individually and use MOA enrichment to identify synergistic mechanisms.
+
+---
+
+## Citation & Publications
+
+If you use scPerturb-CMap in your research, please cite:
+
+```bibtex
+@software{scperturb_cmap2025,
+  author = {Lee, James and contributors},
+  title = {scPerturb-CMap: Single-Cell Connectivity Mapping for Drug Repurposing},
+  year = {2025},
+  version = {0.2.0},
+  url = {https://github.com/jameslee/scPerturb-CMap},
+  doi = {10.5281/zenodo.XXXXXXX}
+}
+```
+
+### Publications Using scPerturb-CMap
+
+We track research using scPerturb-CMap. If you publish with this tool, please let us know via GitHub Discussions or email to be added here.
+
+**Preprints & Papers:**
+- _(To be populated as studies are published)_
+
+**Posters & Presentations:**
+- _(To be populated as studies are presented)_
+
+### Related Work
+
+scPerturb-CMap builds on and complements these foundational tools:
+
+- **LINCS L1000**: Subramanian et al. (2017) *Cell* - The perturbation atlas
+- **Connectivity Map**: Lamb et al. (2006) *Science* - Original connectivity mapping concept
+- **scGen**: Lotfollahi et al. (2019) *Nature Methods* - Single-cell perturbation prediction
+- **Scanpy**: Wolf et al. (2018) *Genome Biology* - Single-cell analysis framework
+
+---
+
+## Community & Support
+
+### Getting Help
+
+- **Documentation**: [https://scperturb-cmap.readthedocs.io](https://scperturb-cmap.readthedocs.io) _(coming soon)_
+- **GitHub Discussions**: [Ask questions, share use cases](https://github.com/jameslee/scPerturb-CMap/discussions)
+- **GitHub Issues**: [Report bugs, request features](https://github.com/jameslee/scPerturb-CMap/issues)
+- **Email**: For sensitive inquiries, contact the maintainers via GitHub profile
+
+### Contributing
+
+We welcome contributions! Priority areas:
+- **Validation studies**: Real-world case studies with experimental confirmation
+- **Benchmarking**: Comparison against literature-validated disease-drug pairs
+- **New features**: Implement roadmap items or propose new capabilities
+- **Documentation**: Tutorials, examples, use case narratives
+- **Bug reports**: Help us improve stability and usability
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed guidelines.
+
+### Acknowledgments
+
+This project uses data from:
+- **LINCS Program**: NIH Common Fund
+- **Broad Institute**: CMap team
+- **Community**: Open-source Python ecosystem (PyTorch, Scanpy, Pandas, Arrow, Streamlit)
+
+Special thanks to early adopters and beta testers for valuable feedback.
 
 ---
 

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "scperturb-cmap.fullname" . }}-config
+  labels:
+    {{- include "scperturb-cmap.labels" . | nindent 4 }}
+data:
+  log-level: {{ .Values.logging.level | quote }}
+  log-format: {{ .Values.logging.format | quote }}

@@ -1,0 +1,139 @@
+resources:
+# GCS bucket for LINCS data
+- name: scperturb-cmap-lincs-data
+  type: storage.v1.bucket
+  properties:
+    location: US
+    storageClass: STANDARD
+    versioning:
+      enabled: true
+    lifecycle:
+      rule:
+        - action:
+            type: SetStorageClass
+            storageClass: NEARLINE
+          condition:
+            age: 90
+            matchesPrefix:
+              - archive/
+        - action:
+            type: SetStorageClass
+            storageClass: COLDLINE
+          condition:
+            age: 180
+    uniformBucketLevelAccess:
+      enabled: true
+    labels:
+      environment: production
+      application: scperturb-cmap
+      data-type: lincs-library
+
+# GCS bucket for model artifacts
+- name: scperturb-cmap-models
+  type: storage.v1.bucket
+  properties:
+    location: US
+    storageClass: STANDARD
+    versioning:
+      enabled: true
+    lifecycle:
+      rule:
+        - action:
+            type: Delete
+          condition:
+            numNewerVersions: 5
+    uniformBucketLevelAccess:
+      enabled: true
+    labels:
+      environment: production
+      application: scperturb-cmap
+      data-type: model-artifacts
+
+# GCS bucket for results
+- name: scperturb-cmap-results
+  type: storage.v1.bucket
+  properties:
+    location: US
+    storageClass: STANDARD
+    versioning:
+      enabled: false
+    lifecycle:
+      rule:
+        - action:
+            type: Delete
+          condition:
+            age: 365
+    uniformBucketLevelAccess:
+      enabled: true
+    labels:
+      environment: production
+      application: scperturb-cmap
+      data-type: results
+
+# Service account for application access
+- name: scperturb-cmap-sa
+  type: iam.v1.serviceAccount
+  properties:
+    accountId: scperturb-cmap-app
+    displayName: scPerturb-CMap Application Service Account
+    description: Service account for scPerturb-CMap application workloads
+
+# IAM bindings for LINCS data bucket (read-only)
+- name: lincs-data-binding
+  type: gcp-types/storage-v1:virtual.buckets.iamMemberBinding
+  properties:
+    bucket: $(ref.scperturb-cmap-lincs-data.name)
+    role: roles/storage.objectViewer
+    member: serviceAccount:$(ref.scperturb-cmap-sa.email)
+
+# IAM bindings for models bucket (read-write)
+- name: models-binding
+  type: gcp-types/storage-v1:virtual.buckets.iamMemberBinding
+  properties:
+    bucket: $(ref.scperturb-cmap-models.name)
+    role: roles/storage.objectAdmin
+    member: serviceAccount:$(ref.scperturb-cmap-sa.email)
+
+# IAM bindings for results bucket (read-write-delete)
+- name: results-binding
+  type: gcp-types/storage-v1:virtual.buckets.iamMemberBinding
+  properties:
+    bucket: $(ref.scperturb-cmap-results.name)
+    role: roles/storage.objectAdmin
+    member: serviceAccount:$(ref.scperturb-cmap-sa.email)
+
+# Cloud Storage Transfer Service for data ingestion
+- name: lincs-transfer-job
+  type: gcp-types/storagetransfer-v1:transferJobs
+  properties:
+    description: Transfer LINCS data from external source
+    projectId: {{ env["project"] }}
+    status: ENABLED
+    schedule:
+      scheduleStartDate:
+        year: 2024
+        month: 1
+        day: 1
+      scheduleEndDate:
+        year: 2025
+        month: 12
+        day: 31
+    transferSpec:
+      gcsDataSink:
+        bucketName: $(ref.scperturb-cmap-lincs-data.name)
+        path: lincs/
+      objectConditions:
+        minTimeElapsedSinceLastModification: 86400s
+      transferOptions:
+        overwriteObjectsAlreadyExistingInSink: false
+        deleteObjectsUniqueInSink: false
+
+outputs:
+- name: lincsDataBucket
+  value: $(ref.scperturb-cmap-lincs-data.name)
+- name: modelsBucket
+  value: $(ref.scperturb-cmap-models.name)
+- name: resultsBucket
+  value: $(ref.scperturb-cmap-results.name)
+- name: serviceAccountEmail
+  value: $(ref.scperturb-cmap-sa.email)

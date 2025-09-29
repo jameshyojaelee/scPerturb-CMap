@@ -1,0 +1,156 @@
+resources:
+- name: scperturb-cmap-cluster
+  type: container.v1.cluster
+  properties:
+    zone: us-central1-a
+    cluster:
+      name: scperturb-cmap-cluster
+      description: GKE cluster for scPerturb-CMap
+      initialClusterVersion: "1.27"
+      
+      # Network configuration
+      network: projects/{{ env["project"] }}/global/networks/default
+      subnetwork: projects/{{ env["project"] }}/regions/us-central1/subnetworks/default
+      
+      # IP allocation policy for VPC-native cluster
+      ipAllocationPolicy:
+        useIpAliases: true
+        createSubnetwork: false
+      
+      # Master authorized networks (restrict access)
+      masterAuthorizedNetworksConfig:
+        enabled: true
+        cidrBlocks:
+          - displayName: "Office Network"
+            cidrBlock: "0.0.0.0/0"  # Replace with your IP range
+      
+      # Private cluster configuration
+      privateClusterConfig:
+        enablePrivateNodes: true
+        enablePrivateEndpoint: false
+        masterIpv4CidrBlock: "172.16.0.0/28"
+      
+      # Addons
+      addonsConfig:
+        httpLoadBalancing:
+          disabled: false
+        horizontalPodAutoscaling:
+          disabled: false
+        kubernetesDashboard:
+          disabled: true
+        gcePersistentDiskCsiDriverConfig:
+          enabled: true
+      
+      # Workload identity
+      workloadIdentityConfig:
+        workloadPool: "{{ env['project'] }}.svc.id.goog"
+      
+      # Binary authorization
+      binaryAuthorization:
+        evaluationMode: PROJECT_SINGLETON_POLICY_ENFORCE
+      
+      # Node pools
+      nodePools:
+        # Default pool for system workloads
+        - name: default-pool
+          initialNodeCount: 1
+          config:
+            machineType: n2-standard-2
+            diskSizeGb: 100
+            diskType: pd-standard
+            oauthScopes:
+              - https://www.googleapis.com/auth/cloud-platform
+            serviceAccount: default
+            metadata:
+              disable-legacy-endpoints: "true"
+            workloadMetadataConfig:
+              mode: GKE_METADATA
+            shieldedInstanceConfig:
+              enableSecureBoot: true
+              enableIntegrityMonitoring: true
+          autoscaling:
+            enabled: true
+            minNodeCount: 1
+            maxNodeCount: 3
+          management:
+            autoUpgrade: true
+            autoRepair: true
+        
+        # API workload pool
+        - name: api-pool
+          initialNodeCount: 2
+          config:
+            machineType: n2-standard-4
+            diskSizeGb: 100
+            diskType: pd-ssd
+            preemptible: false
+            labels:
+              workload: api
+            taints:
+              - key: workload
+                value: api
+                effect: NO_SCHEDULE
+            oauthScopes:
+              - https://www.googleapis.com/auth/cloud-platform
+            workloadMetadataConfig:
+              mode: GKE_METADATA
+          autoscaling:
+            enabled: true
+            minNodeCount: 2
+            maxNodeCount: 10
+          management:
+            autoUpgrade: true
+            autoRepair: true
+        
+        # Worker pool for scoring jobs
+        - name: worker-pool
+          initialNodeCount: 2
+          config:
+            machineType: n2-highmem-4
+            diskSizeGb: 200
+            diskType: pd-ssd
+            preemptible: true  # Use preemptible for cost savings
+            labels:
+              workload: worker
+            taints:
+              - key: workload
+                value: worker
+                effect: NO_SCHEDULE
+            oauthScopes:
+              - https://www.googleapis.com/auth/cloud-platform
+            workloadMetadataConfig:
+              mode: GKE_METADATA
+          autoscaling:
+            enabled: true
+            minNodeCount: 2
+            maxNodeCount: 20
+          management:
+            autoUpgrade: true
+            autoRepair: true
+      
+      # Maintenance window
+      maintenancePolicy:
+        window:
+          recurringWindow:
+            window:
+              startTime: "2024-01-01T00:00:00Z"
+              endTime: "2024-01-01T04:00:00Z"
+            recurrence: "FREQ=WEEKLY;BYDAY=SU"
+      
+      # Logging and monitoring
+      loggingService: logging.googleapis.com/kubernetes
+      monitoringService: monitoring.googleapis.com/kubernetes
+      
+      # Resource labels
+      resourceLabels:
+        environment: production
+        application: scperturb-cmap
+        managed-by: deployment-manager
+
+outputs:
+- name: clusterName
+  value: $(ref.scperturb-cmap-cluster.name)
+- name: clusterEndpoint
+  value: $(ref.scperturb-cmap-cluster.endpoint)
+- name: clusterZone
+  value: us-central1-a

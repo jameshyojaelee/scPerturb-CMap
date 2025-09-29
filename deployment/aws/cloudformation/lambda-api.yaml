@@ -1,0 +1,257 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'Serverless API for scPerturb-CMap scoring using Lambda and API Gateway'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: scperturb-cmap
+    
+  LambdaTimeout:
+    Type: Number
+    Default: 900
+    Description: Lambda timeout in seconds (max 15 min)
+    
+  LambdaMemory:
+    Type: Number
+    Default: 10240
+    Description: Lambda memory in MB
+
+Globals:
+  Function:
+    Runtime: python3.10
+    Timeout: !Ref LambdaTimeout
+    MemorySize: !Ref LambdaMemory
+    Environment:
+      Variables:
+        LINCS_BUCKET:
+          Fn::ImportValue: !Sub ${EnvironmentName}-LINCSDataBucket
+        MODEL_BUCKET:
+          Fn::ImportValue: !Sub ${EnvironmentName}-ModelArtifactsBucket
+        RESULTS_BUCKET:
+          Fn::ImportValue: !Sub ${EnvironmentName}-ResultsBucket
+
+Resources:
+  # Lambda Layer for dependencies
+  DependenciesLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub ${EnvironmentName}-dependencies
+      Description: Python dependencies for scPerturb-CMap
+      Content:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: layers/dependencies.zip
+      CompatibleRuntimes:
+        - python3.10
+
+  # Lambda Layer for scPerturb-CMap package
+  ScPerturbCMapLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub ${EnvironmentName}-scperturb-cmap
+      Description: scPerturb-CMap package
+      Content:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: layers/scperturb-cmap.zip
+      CompatibleRuntimes:
+        - python3.10
+
+  # S3 bucket for Lambda deployment packages
+  DeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${EnvironmentName}-lambda-deployment-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+
+  # Lambda execution role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-lambda-execution
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub
+                    - 'arn:aws:s3:::${Bucket}/*'
+                    - Bucket:
+                        Fn::ImportValue: !Sub ${EnvironmentName}-LINCSDataBucket
+                  - !Sub
+                    - 'arn:aws:s3:::${Bucket}'
+                    - Bucket:
+                        Fn::ImportValue: !Sub ${EnvironmentName}-LINCSDataBucket
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub
+                    - 'arn:aws:s3:::${Bucket}/*'
+                    - Bucket:
+                        Fn::ImportValue: !Sub ${EnvironmentName}-ResultsBucket
+
+  # Scoring Lambda function
+  ScoringFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${EnvironmentName}-scoring
+      CodeUri: ../lambda/
+      Handler: scoring_handler.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Layers:
+        - !Ref DependenciesLayer
+        - !Ref ScPerturbCMapLayer
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /score
+            Method: POST
+      EphemeralStorage:
+        Size: 10240
+      Tags:
+        Name: !Sub ${EnvironmentName}-scoring-function
+
+  # Health check Lambda function
+  HealthCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${EnvironmentName}-health
+      CodeUri: ../lambda/
+      Handler: scoring_handler.health_check_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 10
+      MemorySize: 256
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /health
+            Method: GET
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub ${EnvironmentName}-api
+      StageName: prod
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowMethods: "'GET,POST,OPTIONS'"
+      Auth:
+        ApiKeyRequired: true
+      ThrottleSettings:
+        BurstLimit: 100
+        RateLimit: 50
+      Tags:
+        Name: !Sub ${EnvironmentName}-api-gateway
+
+  # API Key
+  ApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub ${EnvironmentName}-api-key
+      Enabled: true
+
+  # Usage Plan
+  UsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: ApiGatewayProdStage
+    Properties:
+      UsagePlanName: !Sub ${EnvironmentName}-usage-plan
+      ApiStages:
+        - ApiId: !Ref ApiGateway
+          Stage: prod
+      Quota:
+        Limit: 10000
+        Period: MONTH
+      Throttle:
+        BurstLimit: 100
+        RateLimit: 50
+
+  # Link API Key to Usage Plan
+  UsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref ApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref UsagePlan
+
+  # CloudWatch Log Group for API Gateway
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/${EnvironmentName}
+      RetentionInDays: 30
+
+  # CloudWatch Alarms
+  ScoringFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${EnvironmentName}-scoring-errors
+      AlarmDescription: Alert on Lambda function errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ScoringFunction
+
+  ScoringFunctionThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${EnvironmentName}-scoring-throttles
+      AlarmDescription: Alert on Lambda function throttles
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ScoringFunction
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiEndpoint
+
+  ApiKeyId:
+    Description: API Key ID
+    Value: !Ref ApiKey
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiKeyId
+
+  ScoringFunctionArn:
+    Description: Scoring Lambda function ARN
+    Value: !GetAtt ScoringFunction.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-ScoringFunctionArn

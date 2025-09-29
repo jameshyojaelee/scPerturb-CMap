@@ -1,0 +1,308 @@
+# Default values for scperturb-cmap
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global configuration
+global:
+  storageClass: "standard"
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# Image configuration
+image:
+  registry: docker.io
+  repository: scperturb-cmap/scperturb-cmap
+  tag: "0.2.0"
+  pullPolicy: IfNotPresent
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "scperturb-cmap"
+
+# API server configuration
+api:
+  enabled: true
+  replicaCount: 2
+  
+  image:
+    target: api-server
+  
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+    annotations: {}
+  
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 2Gi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 15
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  env:
+    - name: LOG_LEVEL
+      value: "info"
+    - name: WORKERS
+      value: "4"
+    - name: SCPC_DATA_DIR
+      value: "/data"
+    - name: SCPC_CACHE_DIR
+      value: "/app/workspace/cache"
+
+# UI (Streamlit) configuration
+ui:
+  enabled: true
+  replicaCount: 1
+  
+  image:
+    target: runtime
+  
+  service:
+    type: LoadBalancer
+    port: 8501
+    targetPort: 8501
+    annotations: {}
+  
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 1Gi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 75
+  
+  livenessProbe:
+    httpGet:
+      path: /_stcore/health
+      port: 8501
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  
+  readinessProbe:
+    httpGet:
+      path: /_stcore/health
+      port: 8501
+    initialDelaySeconds: 15
+    periodSeconds: 5
+
+# Worker configuration
+worker:
+  enabled: true
+  replicaCount: 3
+  
+  image:
+    target: worker
+  
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 2Gi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
+  
+  env:
+    - name: CELERY_CONCURRENCY
+      value: "2"
+
+# Redis configuration
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  auth:
+    username: scperturb
+    password: ""  # Set via secrets
+    database: scperturb_cmap
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+  hosts:
+    - host: scperturb-cmap.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: api
+              port: 8000
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: ui
+              port: 8501
+  tls:
+    - secretName: scperturb-cmap-tls
+      hosts:
+        - scperturb-cmap.example.com
+
+# Persistent Volume Claims for data storage
+persistence:
+  lincsData:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadOnlyMany
+    size: 100Gi
+    existingClaim: ""
+    mountPath: /data/lincs
+  
+  modelArtifacts:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadOnlyMany
+    size: 10Gi
+    existingClaim: ""
+    mountPath: /app/workspace/artifacts
+  
+  cache:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 20Gi
+    mountPath: /app/workspace/cache
+
+# Network policies
+networkPolicy:
+  enabled: false
+  policyTypes:
+    - Ingress
+    - Egress
+
+# Pod security policy
+podSecurityPolicy:
+  enabled: false
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+  
+  prometheusRule:
+    enabled: true
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+
+# Logging configuration
+logging:
+  enabled: true
+  level: info
+  format: json
+
+# Node affinity and tolerations
+affinity: {}
+tolerations: []
+nodeSelector: {}
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Additional environment variables
+extraEnv: []
+
+# Additional volumes
+extraVolumes: []
+extraVolumeMounts: []

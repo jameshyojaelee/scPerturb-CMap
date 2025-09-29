@@ -1,0 +1,117 @@
+groups:
+  - name: scperturb_cmap_alerts
+    interval: 30s
+    rules:
+      # API availability alerts
+      - alert: APIDown
+        expr: up{job="scperturb-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "scPerturb-CMap API is down"
+          description: "API service {{ $labels.instance }} has been down for more than 2 minutes."
+      
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="scperturb-api",status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "API error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+      
+      # Performance alerts
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="scperturb-api"}[5m])) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API response time"
+          description: "95th percentile response time is {{ $value }}s for {{ $labels.instance }}."
+      
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes{pod=~"scperturb-cmap.*"} / container_spec_memory_limit_bytes{pod=~"scperturb-cmap.*"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of its memory limit."
+      
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{pod=~"scperturb-cmap.*"}[5m]) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of its CPU limit."
+      
+      # Storage alerts
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/data"} / node_filesystem_size_bytes{mountpoint="/data"}) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space on {{ $labels.instance }} is below 10%."
+      
+      # Database alerts
+      - alert: PostgreSQLDown
+        expr: up{job="postgresql"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database has been down for more than 2 minutes."
+      
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache has been down for more than 2 minutes."
+      
+      # Worker alerts
+      - alert: WorkerQueueBacklog
+        expr: celery_queue_length{queue="default"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large worker queue backlog"
+          description: "Celery queue has {{ $value }} pending tasks."
+      
+      - alert: WorkerFailureRate
+        expr: rate(celery_task_failed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High worker failure rate"
+          description: "Worker task failure rate is {{ $value }} over the last 5 minutes."
+      
+      # Lambda/Cloud Functions alerts (for serverless)
+      - alert: LambdaHighErrors
+        expr: aws_lambda_errors_sum / aws_lambda_invocations_sum > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Lambda error rate"
+          description: "Lambda function has {{ $value | humanizePercentage }} error rate."
+      
+      - alert: LambdaHighThrottles
+        expr: aws_lambda_throttles_sum > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Lambda functions being throttled"
+          description: "Lambda function has {{ $value }} throttles in the last 5 minutes."

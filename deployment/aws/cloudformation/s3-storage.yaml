@@ -1,0 +1,222 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 storage buckets for scPerturb-CMap LINCS data and artifacts'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: scperturb-cmap
+    
+  DataRetentionDays:
+    Description: Number of days to retain data
+    Type: Number
+    Default: 365
+
+Resources:
+  # S3 bucket for LINCS data (optimized for large Parquet files)
+  LINCSDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${EnvironmentName}-lincs-data-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToIA
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: STANDARD_IA
+          - Id: TransitionToGlacier
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 180
+                StorageClass: GLACIER
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-LINCS-Data
+        - Key: DataType
+          Value: LINCS-Library
+
+  # S3 bucket for model artifacts
+  ModelArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${EnvironmentName}-models-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-Model-Artifacts
+
+  # S3 bucket for results and outputs
+  ResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${EnvironmentName}-results-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Suspended
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldResults
+            Status: Enabled
+            ExpirationInDays: !Ref DataRetentionDays
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-Results
+
+  # S3 bucket policy for LINCS data (read-only for applications)
+  LINCSDataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LINCSDataBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowApplicationReadAccess
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt ApplicationRole.Arn
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !GetAtt LINCSDataBucket.Arn
+              - !Sub ${LINCSDataBucket.Arn}/*
+
+  # IAM role for applications accessing S3
+  ApplicationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-ApplicationRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+                - lambda.amazonaws.com
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt LINCSDataBucket.Arn
+                  - !Sub ${LINCSDataBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ModelArtifactsBucket.Arn
+                  - !Sub ${ModelArtifactsBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ResultsBucket.Arn
+                  - !Sub ${ResultsBucket.Arn}/*
+
+  # CloudFront distribution for LINCS data caching
+  LINCSDataDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub ${EnvironmentName} LINCS Data CDN
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt LINCSDataBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOAI}
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          MinTTL: 86400
+          DefaultTTL: 604800
+          MaxTTL: 2592000
+        PriceClass: PriceClass_100
+
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub OAI for ${EnvironmentName} LINCS Data
+
+Outputs:
+  LINCSDataBucketName:
+    Description: LINCS data bucket name
+    Value: !Ref LINCSDataBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-LINCSDataBucket
+
+  ModelArtifactsBucketName:
+    Description: Model artifacts bucket name
+    Value: !Ref ModelArtifactsBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-ModelArtifactsBucket
+
+  ResultsBucketName:
+    Description: Results bucket name
+    Value: !Ref ResultsBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-ResultsBucket
+
+  ApplicationRoleArn:
+    Description: IAM role ARN for applications
+    Value: !GetAtt ApplicationRole.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-ApplicationRoleArn
+
+  LINCSDataDistributionDomain:
+    Description: CloudFront distribution domain for LINCS data
+    Value: !GetAtt LINCSDataDistribution.DomainName
+    Export:
+      Name: !Sub ${EnvironmentName}-LINCSDataCDN

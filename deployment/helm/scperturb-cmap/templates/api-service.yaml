@@ -1,0 +1,23 @@
+{{- if .Values.api.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "scperturb-cmap.fullname" . }}-api
+  labels:
+    {{- include "scperturb-cmap.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+  {{- with .Values.api.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+  - port: {{ .Values.api.service.port }}
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "scperturb-cmap.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+{{- end }}

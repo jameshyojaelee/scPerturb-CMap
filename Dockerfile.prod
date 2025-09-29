@@ -1,0 +1,166 @@
+# Production-optimized Dockerfile for scPerturb-CMap
+# Multi-stage build with LINCS caching, security hardening, and optimized layers
+
+# ============================================================================
+# Stage 1: Builder - Compile dependencies and build wheels
+# ============================================================================
+FROM python:3.10-slim AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files first for better layer caching
+COPY pyproject.toml README.md LICENSE ./
+
+# Pre-install dependencies to cache this layer
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel build && \
+    pip wheel --no-cache-dir --wheel-dir /wheels \
+    "anndata" "scanpy" "pandas" "numpy" "scikit-learn" \
+    "torch" "umap-learn" "gseapy" "pydantic>=2" \
+    "plotly" "streamlit" "hydra-core" "pyarrow" "typer"
+
+# Copy source and build package
+COPY src ./src
+RUN python -m build && \
+    pip wheel --no-cache-dir --wheel-dir /wheels dist/*.whl
+
+# ============================================================================
+# Stage 2: LINCS Data Cache - Lightweight data staging layer
+# ============================================================================
+FROM python:3.10-slim AS lincs-cache
+
+WORKDIR /data
+
+# Install minimal dependencies for data operations
+RUN pip install --no-cache-dir pyarrow pandas
+
+# Create optimized data directory structure
+RUN mkdir -p /data/lincs/partitioned \
+    /data/lincs/landmarks \
+    /data/cache
+
+# Copy LINCS data preparation script
+COPY scripts/data/prepare_lincs_subset.py /scripts/
+
+# Placeholder for LINCS data mounting or initialization
+# In production, this layer can be pre-built with common LINCS datasets
+# and cached as a separate image for faster startup
+
+# Create optimized parquet metadata cache
+RUN echo '{"cache_version": "1.0", "partitioning": "cell_line"}' > /data/cache/metadata.json
+
+# ============================================================================
+# Stage 3: Runtime - Minimal production image
+# ============================================================================
+FROM python:3.10-slim AS runtime
+
+# Security: Run as non-root user
+RUN groupadd -r scperturb && useradd -r -g scperturb -u 1000 scperturb
+
+WORKDIR /app
+
+# Install runtime system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Install Python packages from wheels
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --find-links=/wheels \
+    /wheels/scperturb_cmap*.whl && \
+    rm -rf /wheels
+
+# Copy LINCS cache structure (mount real data at runtime)
+COPY --from=lincs-cache --chown=scperturb:scperturb /data /data
+
+# Create workspace directories
+RUN mkdir -p /app/workspace/artifacts \
+    /app/workspace/logs \
+    /app/workspace/cache \
+    && chown -R scperturb:scperturb /app /data
+
+# Health check configuration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Switch to non-root user
+USER scperturb
+
+# Environment variables for production
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    SCPC_DATA_DIR=/data \
+    SCPC_CACHE_DIR=/app/workspace/cache \
+    SCPC_MODEL=/app/workspace/artifacts/best.pt \
+    SCPC_LINCS=/data/lincs/partitioned \
+    OMP_NUM_THREADS=4 \
+    MKL_NUM_THREADS=4
+
+# Expose ports
+EXPOSE 8501
+
+# Default to Streamlit UI
+ENTRYPOINT ["streamlit", "run"]
+CMD ["--server.address=0.0.0.0", "--server.port=8501", "/usr/local/lib/python3.10/site-packages/scperturb_cmap/ui/app.py"]
+
+# ============================================================================
+# Stage 4: API Server - FastAPI-based REST API
+# ============================================================================
+FROM runtime AS api-server
+
+USER root
+
+# Install FastAPI and additional API dependencies
+RUN pip install --no-cache-dir \
+    fastapi==0.104.1 \
+    uvicorn[standard]==0.24.0 \
+    python-multipart==0.0.6 \
+    prometheus-client==0.19.0
+
+# Copy API server code
+COPY --chown=scperturb:scperturb scripts/api /app/api
+
+USER scperturb
+
+# Expose API port
+EXPOSE 8000
+
+# Override entrypoint for API server
+ENTRYPOINT ["uvicorn"]
+CMD ["api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
+# ============================================================================
+# Stage 5: Worker - Background job processor
+# ============================================================================
+FROM runtime AS worker
+
+USER root
+
+# Install job queue dependencies
+RUN pip install --no-cache-dir \
+    celery[redis]==5.3.4 \
+    redis==5.0.1
+
+USER scperturb
+
+# Override for worker processes
+ENTRYPOINT ["celery"]
+CMD ["-A", "scperturb_cmap.worker", "worker", "--loglevel=info", "--concurrency=2"]
+
+# ============================================================================
+# Metadata labels
+# ============================================================================
+LABEL maintainer="scPerturb-CMap Team" \
+      version="0.2.0" \
+      description="Production-ready scPerturb-CMap with optimized LINCS caching" \
+      org.opencontainers.image.source="https://github.com/jameslee/scPerturb-CMap"

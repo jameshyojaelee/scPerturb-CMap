@@ -1,0 +1,214 @@
+version: '3.8'
+
+services:
+  # Redis for caching and job queues
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scperturb-network
+
+  # PostgreSQL for metadata and results storage
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: scperturb
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: scperturb_cmap
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scperturb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scperturb-network
+
+  # Main API server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: api-server
+    ports:
+      - "8000:8000"
+    environment:
+      - SCPC_DATA_DIR=/data
+      - SCPC_CACHE_DIR=/app/workspace/cache
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://scperturb:${DB_PASSWORD:-changeme}@postgres:5432/scperturb_cmap
+      - LOG_LEVEL=info
+      - WORKERS=4
+    volumes:
+      - lincs-data:/data:ro
+      - model-artifacts:/app/workspace/artifacts:ro
+      - api-cache:/app/workspace/cache
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    networks:
+      - scperturb-network
+
+  # Streamlit UI
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: runtime
+    ports:
+      - "8501:8501"
+    environment:
+      - SCPC_DATA_DIR=/data
+      - SCPC_CACHE_DIR=/app/workspace/cache
+      - SCPC_LINCS=/data/lincs/partitioned
+      - API_URL=http://api:8000
+    volumes:
+      - lincs-data:/data:ro
+      - model-artifacts:/app/workspace/artifacts:ro
+      - ui-cache:/app/workspace/cache
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - scperturb-network
+
+  # Background workers for scoring jobs
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: worker
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - SCPC_DATA_DIR=/data
+      - SCPC_CACHE_DIR=/app/workspace/cache
+    volumes:
+      - lincs-data:/data:ro
+      - model-artifacts:/app/workspace/artifacts:ro
+      - worker-cache:/app/workspace/cache
+    depends_on:
+      - redis
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    networks:
+      - scperturb-network
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - ui
+    networks:
+      - scperturb-network
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deployment/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - scperturb-network
+
+  # Grafana for monitoring dashboards
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deployment/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./deployment/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - scperturb-network
+
+volumes:
+  redis-data:
+  postgres-data:
+  lincs-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LINCS_DATA_PATH:-./data/lincs}
+  model-artifacts:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${MODEL_PATH:-./workspace/artifacts}
+  api-cache:
+  ui-cache:
+  worker-cache:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  scperturb-network:
+    driver: bridge
