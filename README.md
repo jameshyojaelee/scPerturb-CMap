@@ -33,21 +33,19 @@ The package ships with:
 
 ## Table of Contents
 1. [Concept Overview](#concept-overview)
-2. [Significant Breakthroughs](#significant-breakthroughs)
-3. [Use Cases for Biologists](#use-cases-for-biologists)
-4. [Feature Highlights](#feature-highlights)
-5. [Installation](#installation)
-6. [Quickstart](#quickstart)
-7. [End-to-End Workflow](#end-to-end-workflow)
-8. [Reference Figures](#reference-figures)
-9. [Repository Layout](#repository-layout)
-10. [Command-Line Essentials](#command-line-essentials)
-11. [Training on Real Inversion Pairs](#training-on-real-inversion-pairs)
-12. [Preparing LINCS L1000 Data](#preparing-lincs-l1000-data)
-13. [Streamlit UI](#streamlit-ui)
-14. [Acceptance & Quality Gates](#acceptance--quality-gates)
-15. [Development Workflow](#development-workflow)
-16. [Planned Enhancements](#planned-enhancements)
+2. [Feature Highlights](#feature-highlights)
+3. [Installation](#installation)
+4. [Quickstart](#quickstart)
+5. [End-to-End Workflow](#end-to-end-workflow)
+6. [Reference Figures](#reference-figures)
+7. [Repository Layout](#repository-layout)
+8. [Command-Line Essentials](#command-line-essentials)
+9. [Explainability Framework](#explainability-framework)
+10. [Cloud Deployment](#cloud-deployment)
+11. [Case Studies](#case-studies)
+12. [Development Workflow](#development-workflow)
+13. [Additional Resources](#additional-resources)
+14. [License](#license)
 17. [HPC Notes](#hpc-notes)
 18. [FAQ](#faq)
 19. [Citation & Publications](#citation--publications)
@@ -237,14 +235,48 @@ make test
 
 ## Repository Layout
 
-- `src/scperturb_cmap/` – Python package with CLI, API, data loaders, models, and Streamlit app.
-- `configs/` – Hydra configuration (e.g., `train.yaml`) consumed by training utilities.
-- `examples/` – Synthetic demo AnnData, LINCS snippets, and canned outputs for tutorials.
-- `data/` – Placeholder for large LINCS or single-cell datasets (ignored by git by default).
-- `scripts/` – Automation helpers (demo generation, validators, Slurm + HPC wrappers).
-- `docs/` & `mkdocs.yml` – Source documentation rendered via MkDocs Material.
-- `workspace/` – Consolidated runtime outputs: `workspace/artifacts/` for checkpoints, `workspace/logs/` for run logs, and `workspace/site/` for the generated MkDocs site.
-- `tests/` – Pytest suite covering IO contracts, scoring logic, and core utilities.
+### Core Directories
+- **`src/scperturb_cmap/`** – Python package with CLI, API, data loaders, models, UI, and explainability framework
+- **`tests/`** – Comprehensive test suite (90%+ coverage) including explainability tests
+- **`examples/`** – Demo data, scripts, and outputs for tutorials
+- **`scripts/`** – Automation helpers (data prep, HPC wrappers, API server)
+
+### Documentation (Organized)
+- **`docs/`** – Comprehensive documentation
+  - `docs/guides/` – Detailed guides (changelog, roadmap, features)
+  - `docs/contributing/` – Contribution guidelines and developer docs
+  - `docs/deployment/` – Cloud deployment documentation
+  - `docs/cases/` – Brief case study overviews
+
+### Case Studies
+- **`case_studies/`** – Three complete real-world examples
+  - `nsclc_cd8/` – NSCLC CD8+ T cell exhaustion
+  - `emt_breast/` – EMT in triple-negative breast cancer
+  - `ifn_macrophages/` – IFN-high macrophages in inflammatory disease
+
+### Deployment (Production-Ready)
+- **`deployment/`** – Production deployment configurations
+  - `deployment/docker/` – Dockerfiles and docker-compose
+  - `deployment/kubernetes/helm/` – Helm charts with auto-scaling
+  - `deployment/aws/` – CloudFormation templates, Lambda functions
+  - `deployment/gcp/` – GKE and Cloud Functions configs
+  - `deployment/ci/` – CI/CD pipeline configurations
+  - `deployment/prometheus/` – Monitoring configs
+  - `deployment/grafana/` – Dashboards
+
+### Data & Results
+- **`data/`** – LINCS libraries and single-cell datasets (git-ignored)
+- **`results/`** – Analysis outputs
+- **`figs/`** – Generated figures and plots
+- **`workspace/`** – Runtime workspace (artifacts, logs, cache)
+
+### Configuration
+- **`pyproject.toml`** – Python package configuration
+- **`Makefile`** – Development commands
+- **`mkdocs.yml`** – Documentation site config
+- **`environment.yml`** – Conda environment
+
+See **[STRUCTURE.md](STRUCTURE.md)** for complete directory tree and navigation guide.
 
 ---
 
@@ -488,6 +520,113 @@ This project uses data from:
 - **Community**: Open-source Python ecosystem (PyTorch, Scanpy, Pandas, Arrow, Streamlit)
 
 Special thanks to early adopters and beta testers for valuable feedback.
+
+---
+
+## Explainability Framework
+
+scPerturb-CMap includes a comprehensive explainability framework providing SHAP-like interpretability:
+
+- **Gene-level attribution**: Which specific genes drive each drug's ranking
+- **Waterfall plots**: Visual gene-by-gene contribution breakdown  
+- **Pathway enrichment**: GO/KEGG/Reactome integration with network visualization
+- **Automated narratives**: Human-readable explanations citing specific gene inversions
+- **Cell-line-specific predictions**: With bootstrap confidence intervals
+- **Comparison mode**: Explains why Drug A ranks higher than Drug B
+
+```python
+from scperturb_cmap.api.explain import ExplainabilityEngine
+
+engine = ExplainabilityEngine(enable_pathway_enrichment=True)
+explained = engine.explain_top_k_drugs(
+    target_signature=target,
+    score_result=results,
+    library=library,
+    top_k=20,
+    output_dir='explanations'
+)
+
+# View automated narratives
+print(explained[['compound', 'score', 'narrative']])
+```
+
+**Documentation**: See **[docs/explainability.md](docs/explainability.md)** and **[docs/guides/EXPLAINABILITY_FEATURES.md](docs/guides/EXPLAINABILITY_FEATURES.md)**
+
+---
+
+## Cloud Deployment
+
+Production-ready deployment infrastructure for AWS, GCP, and Kubernetes:
+
+- **Kubernetes Helm charts** with auto-scaling (HPA) and monitoring
+- **AWS**: ECS/Fargate, Lambda serverless API, S3 optimized storage
+- **GCP**: GKE, Cloud Functions, GCS with lifecycle policies
+- **Docker**: Multi-stage production builds with LINCS caching
+- **Monitoring**: Prometheus, Grafana, CloudWatch, Cloud Monitoring
+- **CI/CD**: GitHub Actions and GitLab pipelines
+
+```bash
+# Deploy to Kubernetes
+helm install scperturb-cmap ./deployment/kubernetes/helm/scperturb-cmap
+
+# Deploy to AWS Lambda (serverless)
+aws cloudformation deploy \
+  --template-file deployment/aws/cloudformation/lambda-api.yaml \
+  --stack-name scperturb-cmap-lambda
+
+# Deploy to GCP Cloud Functions
+cd deployment/gcp/cloud-functions && bash deploy.sh
+```
+
+**Documentation**: See **[docs/deployment/CLOUD_DEPLOYMENT.md](docs/deployment/CLOUD_DEPLOYMENT.md)** and **[deployment/README.md](deployment/README.md)**
+
+---
+
+## Case Studies
+
+Three comprehensive real-world case studies with full workflow examples:
+
+### 1. NSCLC CD8+ T Cell Exhaustion
+Reversing immune exhaustion with top-20 validated compounds and literature citations.  
+**See**: [case_studies/nsclc_cd8/CASE_STUDY_NSCLC_CD8.md](case_studies/nsclc_cd8/CASE_STUDY_NSCLC_CD8.md)
+
+### 2. EMT in Triple-Negative Breast Cancer
+EMT reversal with MOA pathway analysis and experimental validation plan.  
+**See**: [case_studies/emt_breast/CASE_STUDY_EMT_BREAST.md](case_studies/emt_breast/CASE_STUDY_EMT_BREAST.md)
+
+### 3. IFN-High Macrophages
+Cell-line-specific predictions for inflammatory disease with confidence intervals.  
+**See**: [case_studies/ifn_macrophages/CASE_STUDY_IFN_MACROPHAGES.md](case_studies/ifn_macrophages/CASE_STUDY_IFN_MACROPHAGES.md)
+
+Each case study includes:
+- Complete .h5ad → ranked drugs workflow
+- QC interpretation and validation
+- Suggested experimental validations
+- Literature citations
+- MOA enrichment analysis
+
+---
+
+## Additional Resources
+
+### Documentation
+- **[Quick Start Guide](docs/quickstart.md)** - Get started in 5 minutes
+- **[API Reference](docs/api.md)** - Python API documentation
+- **[CLI Reference](docs/cli.md)** - Command-line interface guide
+- **[HPC Deployment](docs/hpc.md)** - Cluster deployment notes
+- **[Explainability Guide](docs/explainability.md)** - Interpretability framework
+
+### Development
+- **[Contributing Guide](docs/contributing/CONTRIBUTING.md)** - How to contribute
+- **[Changelog](docs/guides/CHANGELOG.md)** - Version history
+- **[Roadmap](docs/guides/ROADMAP.md)** - Future plans
+- **[Repository Structure](STRUCTURE.md)** - Complete directory tree
+
+### Deployment
+- **[Cloud Deployment](docs/deployment/CLOUD_DEPLOYMENT.md)** - AWS/GCP deployment
+- **[Docker Guide](deployment/docker/README.md)** - Container deployment
+- **[Helm Charts](deployment/kubernetes/helm/)** - Kubernetes deployment
+- **[CI/CD](deployment/ci/README.md)** - Continuous integration
 
 ---
 

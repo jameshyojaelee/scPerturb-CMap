@@ -1,16 +1,94 @@
 site_name: scPerturb-CMap
+site_description: Single-cell connectivity mapping toolkit for drug repurposing
+site_url: https://scperturb-cmap.readthedocs.io
 site_dir: workspace/site
+
 theme:
   name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: pink
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: pink
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
 nav:
   - Home: index.md
-  - Quickstart: quickstart.md
-  - CLI: cli.md
-  - API: api.md
-  - HPC: hpc.md
+  - Getting Started:
+    - Quickstart: quickstart.md
+    - Installation: quickstart.md#installation
+    - First Analysis: quickstart.md#first-analysis
+  
+  - User Guide:
+    - CLI Reference: cli.md
+    - API Reference: api.md
+    - Explainability Framework: explainability.md
+    - HPC Deployment: hpc.md
+  
   - Case Studies:
-    - NSCLC CD8+ T: cases/nsclc_cd8.md
-    - EMT (Breast): cases/emt_breast.md
+    - Overview: ../case_studies/README.md
+    - NSCLC CD8+ T Cell Exhaustion: cases/nsclc_cd8.md
+    - EMT in Breast Cancer: cases/emt_breast.md
     - IFN-high Macrophages: cases/ifn_macrophage.md
+  
+  - Deployment:
+    - Overview: deployment/CLOUD_DEPLOYMENT.md
+    - Docker: ../deployment/docker/README.md
+    - Kubernetes: deployment/CLOUD_DEPLOYMENT.md#kubernetes-helm
+    - AWS: deployment/CLOUD_DEPLOYMENT.md#aws-ecsfargate
+    - GCP: deployment/CLOUD_DEPLOYMENT.md#gcp-gke
+    - Serverless: deployment/CLOUD_DEPLOYMENT.md#aws-lambda-serverless
+  
+  - Development:
+    - Contributing: contributing/CONTRIBUTING.md
+    - Development Setup: contributing/CONTRIBUTING.md#development-setup
+    - Testing: contributing/CONTRIBUTING.md#testing
+    - Code Style: contributing/CONTRIBUTING.md#code-style
+  
+  - Reference:
+    - Changelog: guides/CHANGELOG.md
+    - Roadmap: guides/ROADMAP.md
+    - Data Notes: guides/DATA_NOTES.md
+    - Repository Structure: ../STRUCTURE.md
+
 plugins:
   - search
+  - tags
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/jameslee/scPerturb-CMap
+  version:
+    provider: mike
