@@ -385,31 +385,17 @@ Contributions welcome—see `CONTRIBUTING.md` for detailed guidance.
 
 ---
 
-## Planned Enhancements
+## Future Enhancements
 
-The following features are on the roadmap (see [`ROADMAP.md`](ROADMAP.md) for details and timelines):
+Potential improvements for future development:
 
-**High Priority (v0.3.0)**
-- [ ] **Batch Processing**: Multi-target comparative analysis with heatmaps and clustering
-- [ ] **Enhanced Gene Mapping**: HGNC/Ensembl integration with fuzzy matching and disambiguation
-- [ ] **Real-World Case Studies**: NSCLC, EMT breast cancer, and IFN-high macrophage validations
-- [ ] **Explainability Tools**: Gene-level contribution analysis and pathway enrichment
-
-**Medium Priority (v0.4.0)**
-- [ ] **Safety Integration**: DrugBank + Tox21 toxicity predictions and safety filters
-- [ ] **Advanced Query DSL**: SQL-like filtering with saved presets
-- [ ] **Community Repository**: Shared signature database with DOI assignment
-- [ ] **Comprehensive Benchmarking**: Gold-standard dataset and comparison with CMap/L1000FWD
-
-**Long Term (v0.5.0+)**
-- [ ] **Advanced Architectures**: Transformer and GNN-based encoders with pre-trained checkpoints
-- [ ] **Spatial Transcriptomics**: Visium/MERFISH neighborhood-aware signatures
-- [ ] **Temporal Dynamics**: Trajectory-based signatures and time-course analysis
-- [ ] **Multi-Omics Integration**: CITE-seq + ATAC-seq + metabolomics
-- [ ] **Cloud Deployment**: Docker + Kubernetes + serverless API with auto-scaling
-- [ ] **Power Analysis Suite**: Sample size calculators and signature stability metrics
-
-See detailed implementation prompts and prioritization rationale in the [roadmap document](ROADMAP.md).
+- **Batch Processing**: Multi-target comparative analysis with heatmaps and clustering
+- **Enhanced Gene Mapping**: HGNC/Ensembl integration with fuzzy matching and disambiguation
+- **Safety Integration**: DrugBank + Tox21 toxicity predictions and safety filters
+- **Advanced Query DSL**: SQL-like filtering with saved presets
+- **Spatial Transcriptomics**: Visium/MERFISH neighborhood-aware signatures
+- **Multi-Omics Integration**: CITE-seq + ATAC-seq + metabolomics
+- **Power Analysis Suite**: Sample size calculators and signature stability metrics
 
 ---
 
@@ -619,7 +605,6 @@ Each case study includes:
 ### Development
 - **[Contributing Guide](docs/contributing/CONTRIBUTING.md)** - How to contribute
 - **[Changelog](docs/guides/CHANGELOG.md)** - Version history
-- **[Roadmap](docs/guides/ROADMAP.md)** - Future plans
 - **[Repository Structure](STRUCTURE.md)** - Complete directory tree
 
 ### Deployment
