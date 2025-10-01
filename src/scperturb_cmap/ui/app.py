@@ -1183,6 +1183,619 @@ def main():
                 width="stretch",
             )
 
+    st.markdown("### Power & QC Analysis")
+    power_tabs = st.tabs(
+        [
+            "Sample Size",
+            "Min Cells",
+            "Ranking CIs",
+            "Stability",
+            "FDR Simulation",
+            "Permutation Test",
+        ]
+    )
+
+    uploaded_adata = st.session_state.get("uploaded_adata")
+    cluster_key = st.session_state.get("target_cluster_key")
+    cluster_label = st.session_state.get("target_cluster_label")
+    ref_mode = st.session_state.get("target_reference_mode", "rest")
+    ref_cluster = st.session_state.get("target_reference_cluster")
+    reference_value = ref_cluster if ref_mode == "cluster" and ref_cluster else "rest"
+
+    with power_tabs[0]:
+        st.write("Estimate how many cells are needed for a stable target signature.")
+        if uploaded_adata is None:
+            st.info("Upload an .h5ad file in the sidebar to enable sample size estimation.")
+        elif not cluster_key or not cluster_label:
+            st.info("Select a cluster in the sidebar to evaluate sample sizes.")
+        else:
+            defaults = st.session_state.get("power_sample_form", {})
+            with st.form("power_sample_size_form"):
+                sample_sizes_text = st.text_input(
+                    "Sample sizes (comma separated, optional)",
+                    value=defaults.get("sample_sizes_text", ""),
+                )
+                replicates_val = st.number_input(
+                    "Bootstrap replicates",
+                    min_value=1,
+                    max_value=500,
+                    value=int(defaults.get("replicates", 30)),
+                    step=1,
+                )
+                threshold_val = st.slider(
+                    "Correlation threshold",
+                    min_value=0.1,
+                    max_value=0.99,
+                    value=float(defaults.get("threshold", 0.7)),
+                    step=0.05,
+                )
+                corr_metric = st.selectbox(
+                    "Correlation metric",
+                    ["spearman", "pearson", "cosine"],
+                    index=["spearman", "pearson", "cosine"].index(
+                        defaults.get("correlation_metric", "spearman")
+                        if defaults.get("correlation_metric", "spearman") in {"spearman", "pearson", "cosine"}
+                        else "spearman"
+                    ),
+                )
+                diff_method = st.selectbox(
+                    "Differential method",
+                    ["rank_biserial", "logfc"],
+                    index=["rank_biserial", "logfc"].index(
+                        defaults.get(
+                            "method",
+                            st.session_state.get("target_cluster_method", "rank_biserial"),
+                        )
+                        if defaults.get(
+                            "method",
+                            st.session_state.get("target_cluster_method", "rank_biserial"),
+                        )
+                        in {"rank_biserial", "logfc"}
+                        else "rank_biserial"
+                    ),
+                )
+                pseudobulk_default = st.session_state.get("target_context", {}).get("pseudobulk_key")
+                pseudobulk_val = st.text_input(
+                    "Pseudobulk key (optional)",
+                    value=defaults.get("pseudobulk_key", pseudobulk_default or ""),
+                )
+                submitted = st.form_submit_button("Estimate sample size")
+
+            if submitted:
+                try:
+                    sizes = parse_int_list(sample_sizes_text)
+                except ValueError as exc:
+                    st.error(f"Sample sizes invalid: {exc}")
+                else:
+                    with st.spinner("Bootstrapping signatures..."):
+                        try:
+                            result = estimate_signature_sample_size(
+                                uploaded_adata,
+                                cluster_key=cluster_key,
+                                cluster=str(cluster_label),
+                                reference=reference_value,
+                                sample_sizes=sizes or None,
+                                replicates=int(replicates_val),
+                                method=diff_method,
+                                pseudobulk_key=pseudobulk_val or None,
+                                correlation_metric=corr_metric,
+                                threshold=float(threshold_val),
+                            )
+                        except Exception as exc:
+                            st.error(f"Failed to estimate sample size: {exc}")
+                        else:
+                            st.session_state["power_sample_size_result"] = {
+                                "summary": result.summary,
+                                "history": result.history,
+                                "recommended": result.recommended_size,
+                                "threshold": result.threshold,
+                                "baseline": result.baseline_cells,
+                            }
+                            st.session_state["power_sample_form"] = {
+                                "sample_sizes_text": sample_sizes_text,
+                                "replicates": int(replicates_val),
+                                "threshold": float(threshold_val),
+                                "correlation_metric": corr_metric,
+                                "method": diff_method,
+                                "pseudobulk_key": pseudobulk_val,
+                            }
+
+            saved = st.session_state.get("power_sample_size_result")
+            if saved:
+                st.metric(
+                    "Recommended target cells",
+                    f"{int(saved['recommended'])}",
+                    help=f"Baseline cells: {saved['baseline']}; threshold: {saved['threshold']}"
+                )
+                st.dataframe(saved["summary"], hide_index=True, use_container_width=True)
+                if not saved["summary"].empty:
+                    fig = px.line(
+                        saved["summary"],
+                        x="sample_size",
+                        y="median_correlation",
+                        markers=True,
+                        title="Median correlation vs. sample size",
+                    )
+                    fig.add_hline(
+                        y=saved["threshold"],
+                        line_dash="dash",
+                        annotation_text="Threshold",
+                        annotation_position="bottom right",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                with st.expander("Bootstrap history", expanded=False):
+                    st.dataframe(saved["history"], hide_index=True, use_container_width=True)
+
+    with power_tabs[1]:
+        st.write("Summarise minimum recommended cells per cluster for the dataset.")
+        if uploaded_adata is None:
+            st.info("Upload an .h5ad file in the sidebar to compute per-cluster recommendations.")
+        elif not cluster_key:
+            st.info("Select a cluster key in the sidebar to evaluate clusters.")
+        else:
+            defaults = st.session_state.get("power_min_cells_form", {})
+            with st.form("power_min_cells_form"):
+                sample_sizes_text = st.text_input(
+                    "Sample sizes (comma separated, optional)",
+                    value=defaults.get("sample_sizes_text", ""),
+                )
+                replicates_val = st.number_input(
+                    "Bootstrap replicates",
+                    min_value=1,
+                    max_value=500,
+                    value=int(defaults.get("replicates", 20)),
+                    step=1,
+                )
+                threshold_val = st.slider(
+                    "Correlation threshold",
+                    min_value=0.1,
+                    max_value=0.99,
+                    value=float(defaults.get("threshold", 0.7)),
+                    step=0.05,
+                )
+                corr_metric = st.selectbox(
+                    "Correlation metric",
+                    ["spearman", "pearson", "cosine"],
+                    index=["spearman", "pearson", "cosine"].index(
+                        defaults.get("correlation_metric", "spearman")
+                        if defaults.get("correlation_metric", "spearman") in {"spearman", "pearson", "cosine"}
+                        else "spearman"
+                    ),
+                )
+                diff_method = st.selectbox(
+                    "Differential method",
+                    ["rank_biserial", "logfc"],
+                    index=["rank_biserial", "logfc"].index(
+                        defaults.get(
+                            "method",
+                            st.session_state.get("target_cluster_method", "rank_biserial"),
+                        )
+                        if defaults.get(
+                            "method",
+                            st.session_state.get("target_cluster_method", "rank_biserial"),
+                        )
+                        in {"rank_biserial", "logfc"}
+                        else "rank_biserial"
+                    ),
+                )
+                pseudobulk_default = st.session_state.get("target_context", {}).get("pseudobulk_key")
+                pseudobulk_val = st.text_input(
+                    "Pseudobulk key (optional)",
+                    value=defaults.get("pseudobulk_key", pseudobulk_default or ""),
+                )
+                submitted = st.form_submit_button("Recommend minimum cells")
+
+            if submitted:
+                try:
+                    sizes = parse_int_list(sample_sizes_text)
+                except ValueError as exc:
+                    st.error(f"Sample sizes invalid: {exc}")
+                else:
+                    with st.spinner("Evaluating clusters..."):
+                        try:
+                            result = recommend_min_cells_per_cluster(
+                                uploaded_adata,
+                                cluster_key=cluster_key,
+                                reference=reference_value,
+                                sample_sizes=sizes or None,
+                                replicates=int(replicates_val),
+                                threshold=float(threshold_val),
+                                method=diff_method,
+                                pseudobulk_key=pseudobulk_val or None,
+                                correlation_metric=corr_metric,
+                            )
+                        except Exception as exc:
+                            st.error(f"Failed to recommend cells: {exc}")
+                        else:
+                            st.session_state["power_min_cells_result"] = result
+                            st.session_state["power_min_cells_form"] = {
+                                "sample_sizes_text": sample_sizes_text,
+                                "replicates": int(replicates_val),
+                                "threshold": float(threshold_val),
+                                "correlation_metric": corr_metric,
+                                "method": diff_method,
+                                "pseudobulk_key": pseudobulk_val,
+                            }
+
+            saved = st.session_state.get("power_min_cells_result")
+            if saved and isinstance(saved, dict):
+                rec_df = saved.get("recommendations")
+                if isinstance(rec_df, pd.DataFrame) and not rec_df.empty:
+                    st.dataframe(rec_df, hide_index=True, use_container_width=True)
+                    valid_clusters = [
+                        c
+                        for c in rec_df["cluster"].tolist()
+                        if c in saved.get("summaries", {})
+                    ]
+                    if valid_clusters:
+                        selected_cluster = st.selectbox(
+                            "Inspect cluster details",
+                            valid_clusters,
+                            key="power_min_cells_cluster_select",
+                        )
+                        st.markdown("**Summary**")
+                        st.dataframe(
+                            saved["summaries"][selected_cluster],
+                            hide_index=True,
+                            use_container_width=True,
+                        )
+                        with st.expander("Bootstrap history", expanded=False):
+                            st.dataframe(
+                                saved["histories"][selected_cluster],
+                                hide_index=True,
+                                use_container_width=True,
+                            )
+                else:
+                    st.info("No recommendations computed yet.")
+
+    with power_tabs[2]:
+        st.write("Bootstrap confidence intervals for rankings using replicate-level scores.")
+        upload = st.file_uploader(
+            "Replicate-level scores (parquet/csv/tsv)",
+            type=["csv", "tsv", "txt", "parquet", "pq", "json", "jsonl"],
+            key="power_rank_ci_upload",
+        )
+        rank_df: Optional[pd.DataFrame] = None
+        if upload is not None:
+            try:
+                rank_df = read_uploaded_table(upload)
+            except Exception as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["power_rank_ci_table"] = rank_df
+        elif "power_rank_ci_table" in st.session_state:
+            rank_df = st.session_state.get("power_rank_ci_table")
+
+        if isinstance(rank_df, pd.DataFrame):
+            st.dataframe(rank_df.head(20), hide_index=True, use_container_width=True)
+            defaults = st.session_state.get("power_rank_ci_form", {})
+            with st.form("power_rank_ci_form"):
+                id_col = st.text_input(
+                    "Signature column",
+                    value=defaults.get("id_col", "signature_id"),
+                )
+                score_col = st.text_input(
+                    "Score column",
+                    value=defaults.get("score_col", "score"),
+                )
+                replicate_col = st.text_input(
+                    "Replicate column",
+                    value=defaults.get("replicate_col", "replicate_id"),
+                )
+                aggfunc = st.selectbox(
+                    "Aggregate replicates with",
+                    ["mean", "median", "sum"],
+                    index=["mean", "median", "sum"].index(
+                        defaults.get("aggfunc", "mean")
+                        if defaults.get("aggfunc", "mean") in {"mean", "median", "sum"}
+                        else "mean"
+                    ),
+                )
+                n_boot = st.number_input(
+                    "Bootstrap draws",
+                    min_value=100,
+                    max_value=5000,
+                    value=int(defaults.get("n_boot", 1000)),
+                    step=100,
+                )
+                ci = st.slider(
+                    "Confidence level",
+                    min_value=0.5,
+                    max_value=0.99,
+                    value=float(defaults.get("ci", 0.95)),
+                    step=0.01,
+                )
+                ascending = st.checkbox(
+                    "Lower scores are better",
+                    value=bool(defaults.get("ascending", True)),
+                )
+                submitted = st.form_submit_button("Bootstrap rankings")
+
+            if submitted:
+                with st.spinner("Bootstrapping ranks..."):
+                    try:
+                        result = bootstrap_rank_confidence(
+                            rank_df,
+                            id_col=id_col,
+                            score_col=score_col,
+                            replicate_col=replicate_col,
+                            n_boot=int(n_boot),
+                            ci=float(ci),
+                            aggfunc=aggfunc,
+                            ascending=ascending,
+                        )
+                    except Exception as exc:
+                        st.error(f"Failed to bootstrap rankings: {exc}")
+                    else:
+                        st.session_state["power_rank_ci_result"] = result
+                        st.session_state["power_rank_ci_form"] = {
+                            "id_col": id_col,
+                            "score_col": score_col,
+                            "replicate_col": replicate_col,
+                            "aggfunc": aggfunc,
+                            "n_boot": int(n_boot),
+                            "ci": float(ci),
+                            "ascending": ascending,
+                        }
+
+        rank_ci_result = st.session_state.get("power_rank_ci_result")
+        if isinstance(rank_ci_result, pd.DataFrame) and not rank_ci_result.empty:
+            st.dataframe(rank_ci_result, hide_index=True, use_container_width=True)
+
+    with power_tabs[3]:
+        st.write("Measure per-signature stability across replicate profiles.")
+        upload = st.file_uploader(
+            "Replicate-level gene scores (parquet/csv/tsv)",
+            type=["csv", "tsv", "txt", "parquet", "pq", "json", "jsonl"],
+            key="power_stability_upload",
+        )
+        stability_df: Optional[pd.DataFrame] = None
+        if upload is not None:
+            try:
+                stability_df = read_uploaded_table(upload)
+            except Exception as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["power_stability_table"] = stability_df
+        elif "power_stability_table" in st.session_state:
+            stability_df = st.session_state.get("power_stability_table")
+
+        if isinstance(stability_df, pd.DataFrame):
+            st.dataframe(stability_df.head(20), hide_index=True, use_container_width=True)
+            defaults = st.session_state.get("power_stability_form", {})
+            with st.form("power_stability_form"):
+                signature_col = st.text_input(
+                    "Signature column",
+                    value=defaults.get("signature_col", "signature_id"),
+                )
+                replicate_col = st.text_input(
+                    "Replicate column",
+                    value=defaults.get("replicate_col", "replicate_id"),
+                )
+                gene_col = st.text_input(
+                    "Gene column",
+                    value=defaults.get("gene_col", "gene_symbol"),
+                )
+                score_col = st.text_input(
+                    "Score column",
+                    value=defaults.get("score_col", "score"),
+                )
+                method = st.selectbox(
+                    "Correlation method",
+                    ["spearman", "pearson", "kendall", "cosine"],
+                    index=["spearman", "pearson", "kendall", "cosine"].index(
+                        defaults.get("method", "spearman")
+                        if defaults.get("method", "spearman") in {"spearman", "pearson", "kendall", "cosine"}
+                        else "spearman"
+                    ),
+                )
+                submitted = st.form_submit_button("Compute stability")
+
+            if submitted:
+                with st.spinner("Computing stability metrics..."):
+                    try:
+                        result = compute_signature_stability(
+                            stability_df,
+                            signature_col=signature_col,
+                            replicate_col=replicate_col,
+                            gene_col=gene_col,
+                            score_col=score_col,
+                            method=method,
+                        )
+                    except Exception as exc:
+                        st.error(f"Failed to compute stability: {exc}")
+                    else:
+                        st.session_state["power_stability_result"] = result
+                        st.session_state["power_stability_form"] = {
+                            "signature_col": signature_col,
+                            "replicate_col": replicate_col,
+                            "gene_col": gene_col,
+                            "score_col": score_col,
+                            "method": method,
+                        }
+
+        stability_result = st.session_state.get("power_stability_result")
+        if isinstance(stability_result, pd.DataFrame) and not stability_result.empty:
+            st.dataframe(stability_result, hide_index=True, use_container_width=True)
+
+    with power_tabs[4]:
+        st.write("Estimate false discovery rates by permuting hit labels.")
+        source = st.radio(
+            "Data source",
+            ["Current results", "Upload table"],
+            index=0,
+            horizontal=True,
+            key="power_fdr_source",
+        )
+        fdr_df: Optional[pd.DataFrame] = None
+        if source == "Current results":
+            if ranking_df is not None and not ranking_df.empty:
+                fdr_df = ranking_df
+            else:
+                st.info("Run scoring to generate rankings or upload a table.")
+        else:
+            upload = st.file_uploader(
+                "Ranked table (parquet/csv/tsv)",
+                type=["csv", "tsv", "txt", "parquet", "pq", "json", "jsonl"],
+                key="power_fdr_upload",
+            )
+            if upload is not None:
+                try:
+                    fdr_df = read_uploaded_table(upload)
+                except Exception as exc:
+                    st.error(str(exc))
+                else:
+                    st.session_state["power_fdr_table"] = fdr_df
+            elif "power_fdr_table" in st.session_state:
+                fdr_df = st.session_state.get("power_fdr_table")
+
+        if isinstance(fdr_df, pd.DataFrame):
+            defaults = st.session_state.get("power_fdr_form", {})
+            label_default = defaults.get("label_col", "is_hit")
+            score_default = defaults.get("score_col", "score")
+            with st.form("power_fdr_form"):
+                score_col = st.text_input("Score column", value=score_default)
+                label_col = st.text_input("Hit label column", value=label_default)
+                top_k = st.number_input(
+                    "Top K",
+                    min_value=1,
+                    max_value=max(1, int(len(fdr_df))),
+                    value=int(defaults.get("top_k", min(50, len(fdr_df)))),
+                    step=1,
+                )
+                n_sim = st.number_input(
+                    "Permutations",
+                    min_value=100,
+                    max_value=10000,
+                    value=int(defaults.get("n_sim", 2000)),
+                    step=100,
+                )
+                higher_is_better = st.checkbox(
+                    "Higher scores signify stronger hits",
+                    value=bool(defaults.get("higher_is_better", False)),
+                )
+                submitted = st.form_submit_button("Simulate FDR")
+
+            if submitted:
+                if label_col not in fdr_df.columns:
+                    st.error(f"Column '{label_col}' not found in table.")
+                elif score_col not in fdr_df.columns:
+                    st.error(f"Column '{score_col}' not found in table.")
+                else:
+                    with st.spinner("Running permutations..."):
+                        try:
+                            res = simulate_false_discovery_rate(
+                                fdr_df,
+                                score_col=score_col,
+                                label_col=label_col,
+                                top_k=int(top_k),
+                                n_sim=int(n_sim),
+                                ascending=not higher_is_better,
+                            )
+                        except Exception as exc:
+                            st.error(f"Failed to simulate FDR: {exc}")
+                        else:
+                            st.session_state["power_fdr_result"] = res
+                            st.session_state["power_fdr_form"] = {
+                                "score_col": score_col,
+                                "label_col": label_col,
+                                "top_k": int(top_k),
+                                "n_sim": int(n_sim),
+                                "higher_is_better": higher_is_better,
+                            }
+
+        fdr_result = st.session_state.get("power_fdr_result")
+        if isinstance(fdr_result, dict):
+            metrics = [
+                ("Observed hits", fdr_result.get("observed_hits")),
+                ("Expected false", f"{fdr_result.get('expected_false_positives', 0):.2f}"),
+                ("Estimated FDR", f"{fdr_result.get('estimated_fdr', 0):.3f}"),
+                ("Permutation p-value", f"{fdr_result.get('p_value', 0):.4f}"),
+            ]
+            cols = st.columns(len(metrics))
+            for col, (label, value) in zip(cols, metrics):
+                col.metric(label, value)
+            with st.expander("Null distribution", expanded=False):
+                st.line_chart(fdr_result.get("null_distribution"))
+
+    with power_tabs[5]:
+        st.write("Permutation test for comparing two sets of scores.")
+        defaults = st.session_state.get("power_permutation_form", {})
+        with st.form("power_permutation_form"):
+            group_a_text = st.text_area(
+                "Group A values",
+                value=defaults.get("group_a_text", "0.1, 0.2, 0.18"),
+            )
+            group_b_text = st.text_area(
+                "Group B values",
+                value=defaults.get("group_b_text", "0.3, 0.35, 0.4"),
+            )
+            statistic = st.selectbox(
+                "Statistic",
+                ["difference_in_means", "difference_in_medians", "cohens_d"],
+                index=["difference_in_means", "difference_in_medians", "cohens_d"].index(
+                    defaults.get("statistic", "difference_in_means")
+                    if defaults.get("statistic", "difference_in_means")
+                    in {"difference_in_means", "difference_in_medians", "cohens_d"}
+                    else "difference_in_means"
+                ),
+            )
+            n_perm = st.number_input(
+                "Permutations",
+                min_value=100,
+                max_value=10000,
+                value=int(defaults.get("n_permutations", 2000)),
+                step=100,
+            )
+            alternative = st.selectbox(
+                "Alternative",
+                ["two-sided", "greater", "less"],
+                index=["two-sided", "greater", "less"].index(
+                    defaults.get("alternative", "two-sided")
+                    if defaults.get("alternative", "two-sided") in {"two-sided", "greater", "less"}
+                    else "two-sided"
+                ),
+            )
+            submitted = st.form_submit_button("Run permutation test")
+
+        if submitted:
+            try:
+                group_a_vals = parse_float_list(group_a_text)
+                group_b_vals = parse_float_list(group_b_text)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                if not group_a_vals or not group_b_vals:
+                    st.error("Both groups require at least one numeric value.")
+                else:
+                    with st.spinner("Permuting groups..."):
+                        try:
+                            res = permutation_significance_test(
+                                group_a_vals,
+                                group_b_vals,
+                                statistic=statistic,
+                                n_permutations=int(n_perm),
+                                alternative=alternative,
+                            )
+                        except Exception as exc:
+                            st.error(f"Failed to run permutation test: {exc}")
+                        else:
+                            st.session_state["power_permutation_result"] = res
+                            st.session_state["power_permutation_form"] = {
+                                "group_a_text": group_a_text,
+                                "group_b_text": group_b_text,
+                                "statistic": statistic,
+                                "n_permutations": int(n_perm),
+                                "alternative": alternative,
+                            }
+
+        perm_result = st.session_state.get("power_permutation_result")
+        if isinstance(perm_result, dict):
+            st.metric("Observed statistic", f"{perm_result.get('observed_statistic', 0):.4f}")
+            st.metric("Permutation p-value", f"{perm_result.get('p_value', 0):.4f}")
+            with st.expander("Null distribution", expanded=False):
+                st.line_chart(perm_result.get("null_distribution"))
+
     bookmark_payload = {
         "version": SESSION_VERSION,
         "library_path": str(selected_library_path),
