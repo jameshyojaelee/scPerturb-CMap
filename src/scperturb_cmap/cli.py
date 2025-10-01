@@ -5,7 +5,7 @@ import logging
 import platform
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import pandas as pd
 import torch
@@ -13,6 +13,14 @@ import typer
 
 from scperturb_cmap import __version__
 from scperturb_cmap.analysis.aggregate import collapse_replicates_modz
+from scperturb_cmap.analysis.power import (
+    bootstrap_rank_confidence,
+    compute_signature_stability,
+    estimate_signature_sample_size,
+    permutation_significance_test,
+    recommend_min_cells_per_cluster,
+    simulate_false_discovery_rate,
+)
 from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.data.lincs_gctx import gctx_to_long
 from scperturb_cmap.data.lincs_loader import load_lincs_long
@@ -28,6 +36,50 @@ from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.utils.device import get_device
 
 app = typer.Typer(name="scperturb-cmap", help="scPerturb-CMap command line interface")
+power_app = typer.Typer(name="power", help="Power analysis utilities")
+app.add_typer(power_app, name="power")
+
+
+def _load_table(path: str) -> pd.DataFrame:
+    file_path = Path(path)
+    if not file_path.exists():
+        raise typer.BadParameter(f"File not found: {path}")
+
+    suffix = file_path.suffix.lower()
+    try:
+        if suffix in {".parquet", ".pq"}:
+            return pd.read_parquet(file_path, engine="pyarrow")
+        if suffix in {".tsv", ".txt"}:
+            return pd.read_csv(file_path, sep="\t")
+        if suffix in {".json", ".jsonl"}:
+            return pd.read_json(file_path)
+        return pd.read_csv(file_path)
+    except Exception as exc:  # pragma: no cover - pandas error message forwarded
+        raise typer.BadParameter(f"Failed to load table '{path}': {exc}") from exc
+
+
+def _parse_int_list(text: Optional[str]) -> Optional[List[int]]:
+    if text is None:
+        return None
+    parts = [p.strip() for p in str(text).split(",") if p.strip()]
+    if not parts:
+        return None
+    try:
+        return [int(p) for p in parts]
+    except ValueError as exc:  # pragma: no cover - user input path
+        raise typer.BadParameter(f"Could not parse integer list from '{text}'") from exc
+
+
+def _write_dataframe(df: pd.DataFrame, path: Optional[str]) -> None:
+    if path is None:
+        return
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = out_path.suffix.lower()
+    if suffix in {".parquet", ".pq"}:
+        df.to_parquet(out_path, index=False)
+    else:
+        df.to_csv(out_path, index=False)
 
 
 @app.callback()
@@ -42,6 +94,354 @@ def _configure(
     """Configure global logging for the CLI."""
     lvl = getattr(logging, str(log_level).upper(), logging.INFO)
     logging.basicConfig(level=lvl, format="[%(levelname)s] %(message)s")
+
+
+@power_app.command("sample-size")
+def power_sample_size(
+    h5ad: str = typer.Option(..., help="Path to .h5ad file"),
+    cluster_key: str = typer.Option(..., help="Observation column for cluster labels"),
+    cluster: str = typer.Option(..., help="Cluster to evaluate"),
+    reference: str = typer.Option(
+        "rest", help="Reference label or 'rest' to use all other cells"
+    ),
+    sample_sizes: Optional[str] = typer.Option(
+        None, help="Optional comma-separated list of sample sizes"
+    ),
+    replicates: int = typer.Option(50, help="Bootstrap replicates per sample size"),
+    method: str = typer.Option(
+        "rank_biserial", help="Differential signal method for signature construction"
+    ),
+    pseudobulk_key: Optional[str] = typer.Option(
+        None, help="Optional obs column for pseudobulk aggregation"
+    ),
+    correlation_metric: str = typer.Option(
+        "spearman", help="Correlation metric for comparing signatures"
+    ),
+    threshold: float = typer.Option(
+        0.7, help="Correlation threshold indicating sufficient stability"
+    ),
+    random_seed: Optional[int] = typer.Option(None, help="Random seed for reproducibility"),
+    summary_output: Optional[str] = typer.Option(
+        None, help="Optional CSV/Parquet path for summary table"
+    ),
+    history_output: Optional[str] = typer.Option(
+        None, help="Optional CSV/Parquet path for bootstrap history"
+    ),
+    json_output: Optional[str] = typer.Option(
+        None, help="Optional JSON output path with combined results"
+    ),
+) -> None:
+    """Estimate minimum cells required for a stable target signature."""
+
+    adata = load_h5ad(h5ad)
+    sizes = _parse_int_list(sample_sizes)
+    result = estimate_signature_sample_size(
+        adata,
+        cluster_key=cluster_key,
+        cluster=cluster,
+        reference=reference,
+        sample_sizes=sizes,
+        replicates=replicates,
+        method=method,
+        pseudobulk_key=pseudobulk_key,
+        correlation_metric=correlation_metric,
+        threshold=threshold,
+        random_state=random_seed,
+    )
+
+    typer.echo(
+        f"Baseline cells: {result.baseline_cells}; recommended sample size: {result.recommended_size} "
+        f"(threshold={result.threshold})"
+    )
+    typer.echo(result.summary.to_string(index=False))
+
+    _write_dataframe(result.summary, summary_output)
+    _write_dataframe(result.history, history_output)
+
+    if json_output:
+        payload: Dict[str, Any] = {
+            "recommended_size": result.recommended_size,
+            "threshold": result.threshold,
+            "baseline_cells": result.baseline_cells,
+            "summary": result.summary.to_dict(orient="records"),
+            "history": result.history.to_dict(orient="records"),
+        }
+        out_path = Path(json_output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2))
+
+
+@power_app.command("min-cells")
+def power_min_cells(
+    h5ad: str = typer.Option(..., help="Path to .h5ad file"),
+    cluster_key: str = typer.Option(..., help="Observation column for clusters"),
+    reference: str = typer.Option(
+        "rest", help="Reference cluster label or 'rest'"
+    ),
+    sample_sizes: Optional[str] = typer.Option(
+        None, help="Optional comma-separated list of sample sizes to evaluate"
+    ),
+    replicates: int = typer.Option(50, help="Bootstrap replicates per sample size"),
+    threshold: float = typer.Option(
+        0.7, help="Correlation threshold indicating sufficient stability"
+    ),
+    method: str = typer.Option(
+        "rank_biserial", help="Differential signal method for signature construction"
+    ),
+    pseudobulk_key: Optional[str] = typer.Option(
+        None, help="Optional obs column for pseudobulk aggregation"
+    ),
+    correlation_metric: str = typer.Option(
+        "spearman", help="Correlation metric for comparing signatures"
+    ),
+    random_seed: Optional[int] = typer.Option(None, help="Random seed"),
+    recommendations_output: Optional[str] = typer.Option(
+        None, help="Optional CSV/Parquet path for per-cluster recommendations"
+    ),
+    summaries_dir: Optional[str] = typer.Option(
+        None, help="Optional directory to write per-cluster summary tables"
+    ),
+    histories_dir: Optional[str] = typer.Option(
+        None, help="Optional directory to write per-cluster bootstrap histories"
+    ),
+    json_output: Optional[str] = typer.Option(
+        None, help="Optional JSON output path with all results"
+    ),
+) -> None:
+    """Recommend minimum cells per cluster to reach the desired stability."""
+
+    adata = load_h5ad(h5ad)
+    sizes = _parse_int_list(sample_sizes)
+    result = recommend_min_cells_per_cluster(
+        adata,
+        cluster_key=cluster_key,
+        reference=reference,
+        sample_sizes=sizes,
+        replicates=replicates,
+        threshold=threshold,
+        method=method,
+        pseudobulk_key=pseudobulk_key,
+        correlation_metric=correlation_metric,
+        random_state=random_seed,
+    )
+
+    recommendations = result["recommendations"].copy()
+    typer.echo(recommendations.to_string(index=False))
+    _write_dataframe(recommendations, recommendations_output)
+
+    if summaries_dir:
+        summaries_path = Path(summaries_dir)
+        summaries_path.mkdir(parents=True, exist_ok=True)
+        for cluster, summary_df in result["summaries"].items():
+            _write_dataframe(summary_df, str(summaries_path / f"summary_{cluster}.csv"))
+
+    if histories_dir:
+        histories_path = Path(histories_dir)
+        histories_path.mkdir(parents=True, exist_ok=True)
+        for cluster, history_df in result["histories"].items():
+            _write_dataframe(history_df, str(histories_path / f"history_{cluster}.csv"))
+
+    if json_output:
+        payload = {
+            "recommendations": recommendations.to_dict(orient="records"),
+            "summaries": {
+                cluster: df.to_dict(orient="records")
+                for cluster, df in result["summaries"].items()
+            },
+            "histories": {
+                cluster: df.to_dict(orient="records")
+                for cluster, df in result["histories"].items()
+            },
+        }
+        out_path = Path(json_output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2))
+
+
+@power_app.command("rank-ci")
+def power_rank_ci(
+    table: str = typer.Option(..., help="Path to replicate-level score table"),
+    id_col: str = typer.Option("signature_id", help="Column with signature identifiers"),
+    score_col: str = typer.Option("score", help="Column with score values"),
+    replicate_col: str = typer.Option(
+        "replicate_id", help="Column with replicate identifiers"
+    ),
+    n_boot: int = typer.Option(1000, help="Number of bootstrap resamples"),
+    ci: float = typer.Option(0.95, help="Confidence interval level"),
+    aggfunc: str = typer.Option(
+        "mean", help="Aggregation over replicates (mean|median|sum)"
+    ),
+    ascending: bool = typer.Option(
+        True, help="Sort ascending when ranking scores (lower implies better)"
+    ),
+    random_seed: Optional[int] = typer.Option(None, help="Random seed"),
+    output: Optional[str] = typer.Option(
+        None, help="Optional CSV/Parquet path for bootstrap rank summary"
+    ),
+    json_output: Optional[str] = typer.Option(
+        None, help="Optional JSON output path"
+    ),
+) -> None:
+    """Bootstrap ranking confidence intervals from replicate-level scores."""
+
+    df = _load_table(table)
+    res = bootstrap_rank_confidence(
+        df,
+        id_col=id_col,
+        score_col=score_col,
+        replicate_col=replicate_col,
+        n_boot=n_boot,
+        ci=ci,
+        aggfunc=aggfunc,
+        ascending=ascending,
+        random_state=random_seed,
+    )
+    typer.echo(res.to_string(index=False))
+    _write_dataframe(res, output)
+
+    if json_output:
+        out_path = Path(json_output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(res.to_dict(orient="records"), indent=2))
+
+
+@power_app.command("stability")
+def power_stability(
+    table: str = typer.Option(..., help="Path to replicate-level gene score table"),
+    signature_col: str = typer.Option(
+        "signature_id", help="Column containing signature identifiers"
+    ),
+    replicate_col: str = typer.Option(
+        "replicate_id", help="Column containing replicate identifiers"
+    ),
+    gene_col: str = typer.Option("gene_symbol", help="Column with gene IDs"),
+    score_col: str = typer.Option("score", help="Column with score values"),
+    method: str = typer.Option(
+        "spearman", help="Pairwise correlation metric (pearson|spearman|kendall|cosine)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, help="Optional CSV/Parquet path for stability metrics"
+    ),
+    json_output: Optional[str] = typer.Option(
+        None, help="Optional JSON output path"
+    ),
+) -> None:
+    """Compute per-signature stability metrics across replicates."""
+
+    df = _load_table(table)
+    res = compute_signature_stability(
+        df,
+        signature_col=signature_col,
+        replicate_col=replicate_col,
+        gene_col=gene_col,
+        score_col=score_col,
+        method=method,
+    )
+    typer.echo(res.to_string(index=False))
+    _write_dataframe(res, output)
+    if json_output:
+        out_path = Path(json_output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(res.to_dict(orient="records"), indent=2))
+
+
+@power_app.command("fdr")
+def power_fdr(
+    table: str = typer.Option(..., help="Path to ranked table with hit labels"),
+    score_col: str = typer.Option("score", help="Column containing ranking scores"),
+    label_col: str = typer.Option("is_hit", help="Boolean/int column flagging known hits"),
+    top_k: int = typer.Option(50, help="Number of top rows to evaluate"),
+    n_sim: int = typer.Option(1000, help="Number of label permutations"),
+    descending: bool = typer.Option(
+        False, help="Set if higher scores are more significant"
+    ),
+    random_seed: Optional[int] = typer.Option(None, help="Random seed"),
+    json_output: Optional[str] = typer.Option(
+        None, help="Optional JSON output path"
+    ),
+) -> None:
+    """Simulate expected false discoveries using label permutations."""
+
+    df = _load_table(table)
+    res = simulate_false_discovery_rate(
+        df,
+        score_col=score_col,
+        label_col=label_col,
+        top_k=top_k,
+        n_sim=n_sim,
+        ascending=not descending,
+        random_state=random_seed,
+    )
+    typer.echo(
+        " | ".join(
+            [
+                f"top_k={res['top_k']}",
+                f"observed_hits={res['observed_hits']}",
+                f"expected_false={res['expected_false_positives']:.2f}",
+                f"estimated_fdr={res['estimated_fdr']:.3f}",
+                f"p_value={res['p_value']:.4f}",
+            ]
+        )
+    )
+
+    if json_output:
+        payload = {
+            **{k: v for k, v in res.items() if k != "null_distribution"},
+            "null_distribution": res["null_distribution"].tolist(),
+        }
+        out_path = Path(json_output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2))
+
+
+@power_app.command("permutation-test")
+def power_permutation_test(
+    group_a: List[float] = typer.Option(
+        ..., "--group-a", help="Observations from group A", show_default=False
+    ),
+    group_b: List[float] = typer.Option(
+        ..., "--group-b", help="Observations from group B", show_default=False
+    ),
+    statistic: str = typer.Option(
+        "difference_in_means",
+        help="Statistic to compare groups (difference_in_means|difference_in_medians|cohens_d)",
+    ),
+    n_permutations: int = typer.Option(1000, help="Number of permutations"),
+    alternative: str = typer.Option(
+        "two-sided", help="two-sided|greater|less alternative hypothesis"
+    ),
+    random_seed: Optional[int] = typer.Option(None, help="Random seed"),
+    json_output: Optional[str] = typer.Option(
+        None, help="Optional JSON output path"
+    ),
+) -> None:
+    """Permutation-based significance test for two groups."""
+
+    if not group_a or not group_b:
+        raise typer.BadParameter("Both --group-a and --group-b require at least one value")
+
+    res = permutation_significance_test(
+        group_a,
+        group_b,
+        statistic=statistic,
+        n_permutations=n_permutations,
+        random_state=random_seed,
+        alternative=alternative,
+    )
+    typer.echo(
+        f"statistic={res['observed_statistic']:.4f} | p_value={res['p_value']:.4f} | statistic_name={res['statistic']}"
+    )
+
+    if json_output:
+        payload = {
+            "observed_statistic": res["observed_statistic"],
+            "p_value": res["p_value"],
+            "statistic": res["statistic"],
+            "null_distribution": res["null_distribution"].tolist(),
+        }
+        out_path = Path(json_output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2))
 @app.command("validate-h5ad")
 def validate_h5ad(
     h5ad: str = typer.Option(..., help="Path to .h5ad to validate"),

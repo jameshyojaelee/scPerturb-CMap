@@ -16,6 +16,14 @@ import plotly.express as px
 import streamlit as st
 
 from scperturb_cmap.analysis.enrichment import moa_enrichment
+from scperturb_cmap.analysis.power import (
+    bootstrap_rank_confidence,
+    compute_signature_stability,
+    estimate_signature_sample_size,
+    permutation_significance_test,
+    recommend_min_cells_per_cluster,
+    simulate_false_discovery_rate,
+)
 from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.data.lincs_loader import load_lincs_long
 from scperturb_cmap.data.scrna_loader import load_h5ad
@@ -223,6 +231,32 @@ def parse_gene_block(text: str) -> List[str]:
     if not text:
         return []
     return [gene.strip() for gene in text.splitlines() if gene.strip()]
+
+
+def parse_int_list(text: str) -> List[int]:
+    if not text:
+        return []
+    parts = [p.strip() for p in text.replace("\n", ",").split(",") if p.strip()]
+    out: List[int] = []
+    for part in parts:
+        try:
+            out.append(int(part))
+        except ValueError:
+            raise ValueError(f"Could not parse integer from '{part}'")
+    return out
+
+
+def parse_float_list(text: str) -> List[float]:
+    if not text:
+        return []
+    parts = [p.strip() for p in text.replace("\n", ",").split(",") if p.strip()]
+    values: List[float] = []
+    for part in parts:
+        try:
+            values.append(float(part))
+        except ValueError:
+            raise ValueError(f"Could not parse float from '{part}'")
+    return values
 
 
 def encode_state_token(payload: Dict[str, Any]) -> str:
@@ -632,6 +666,28 @@ def read_uploaded_h5ad(uploaded) -> Optional[object]:
     return load_h5ad(path)
 
 
+@st.cache_data(show_spinner=False)
+def read_uploaded_table(uploaded) -> Optional[pd.DataFrame]:
+    if uploaded is None:
+        return None
+    uploaded.seek(0)
+    name = uploaded.name.lower()
+    buffer = io.BytesIO(uploaded.read())
+    buffer.seek(0)
+    try:
+        if name.endswith('.parquet') or name.endswith('.pq'):
+            return pd.read_parquet(buffer)
+        if name.endswith('.tsv') or name.endswith('.txt'):
+            return pd.read_csv(buffer, sep='\t')
+        if name.endswith('.json') or name.endswith('.jsonl'):
+            buffer.seek(0)
+            return pd.read_json(buffer)
+        buffer.seek(0)
+        return pd.read_csv(buffer)
+    except Exception as exc:
+        raise ValueError(f"Failed to load uploaded table '{uploaded.name}': {exc}") from exc
+
+
 def sidebar_controls(
     lincs_long: pd.DataFrame,
 ) -> Tuple[
@@ -686,6 +742,10 @@ def sidebar_controls(
     elif target_mode == "+ .h5ad":
         h5ad_file = st.sidebar.file_uploader("Upload .h5ad", type=["h5ad"], key="target_h5ad_file")
         adata = read_uploaded_h5ad(h5ad_file)
+        if adata is None:
+            st.session_state.pop("uploaded_adata", None)
+        else:
+            st.session_state["uploaded_adata"] = adata
         if adata is None:
             st.sidebar.info("Upload an .h5ad file to build a target signature.")
             target_sig = target_from_gene_lists(["G1", "G2"], ["G10"])
