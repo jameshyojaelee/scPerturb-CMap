@@ -70,7 +70,7 @@ def collapse_replicates_modz(
 
         collapsed_df = pd.DataFrame(
             {
-                signature_col: sig,
+                signature_col: [sig] * len(pivot.columns),
                 gene_col: pivot.columns.to_list(),
                 score_col: collapsed,
             }

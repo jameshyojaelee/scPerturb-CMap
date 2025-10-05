@@ -7,7 +7,7 @@ import time
 from typing import Any, Callable, Dict, Optional
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, Summary, start_http_server
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -84,8 +84,8 @@ class MetricsCollector:
         try:
             start_http_server(port)
             print(f"Prometheus metrics server started on port {port}")
-        except Exception as e:
-            print(f"Warning: Failed to start Prometheus server: {e}")
+        except Exception as exc:
+            print(f"Warning: Failed to start Prometheus server: {exc}")
     
     def _init_cloudwatch(self):
         """Initialize CloudWatch metrics"""
@@ -224,8 +224,8 @@ class MetricsCollector:
                 Namespace=self.namespace,
                 MetricData=metrics
             )
-        except Exception as e:
-            print(f"Warning: Failed to put CloudWatch metrics: {e}")
+        except Exception as exc:
+            print(f"Warning: Failed to put CloudWatch metrics: {exc}")
 
 
 # Global metrics collector instance
@@ -262,7 +262,7 @@ def track_time(metric_name: str = None, labels: Dict[str, str] = None):
                 result = func(*args, **kwargs)
                 success = True
                 return result
-            except Exception as e:
+            except Exception:
                 success = False
                 raise
             finally:

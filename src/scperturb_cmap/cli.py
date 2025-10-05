@@ -5,7 +5,7 @@ import logging
 import platform
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import torch
@@ -149,10 +149,12 @@ def power_sample_size(
         random_state=random_seed,
     )
 
-    typer.echo(
-        f"Baseline cells: {result.baseline_cells}; recommended sample size: {result.recommended_size} "
+    baseline_msg = (
+        f"Baseline cells: {result.baseline_cells}; "
+        f"recommended sample size: {result.recommended_size} "
         f"(threshold={result.threshold})"
     )
+    typer.echo(baseline_msg)
     typer.echo(result.summary.to_string(index=False))
 
     _write_dataframe(result.summary, summary_output)
@@ -428,9 +430,12 @@ def power_permutation_test(
         random_state=random_seed,
         alternative=alternative,
     )
-    typer.echo(
-        f"statistic={res['observed_statistic']:.4f} | p_value={res['p_value']:.4f} | statistic_name={res['statistic']}"
+    stats_msg = (
+        f"statistic={res['observed_statistic']:.4f} | "
+        f"p_value={res['p_value']:.4f} | "
+        f"statistic_name={res['statistic']}"
     )
+    typer.echo(stats_msg)
 
     if json_output:
         payload = {

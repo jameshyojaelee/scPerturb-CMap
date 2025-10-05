@@ -1,19 +1,19 @@
 """
 Tests for explainability framework
 """
+
 import numpy as np
 import pandas as pd
 import pytest
-from pathlib import Path
 
 from scperturb_cmap.explainability.feature_importance import (
     GeneContributionAnalyzer,
-    create_waterfall_plot,
     compare_drug_contributions,
+    create_waterfall_plot,
     explain_drug_ranking,
 )
-from scperturb_cmap.explainability.pathway_enrichment import PathwayEnricher
 from scperturb_cmap.explainability.narrative_generator import DrugNarrativeGenerator
+from scperturb_cmap.explainability.pathway_enrichment import PathwayEnricher
 from scperturb_cmap.explainability.uncertainty import UncertaintyQuantifier
 
 
@@ -218,17 +218,7 @@ class TestIntegration:
         drug_dict = {f'GENE{i}': -target_dict[f'GENE{i}'] + np.random.randn()*0.1 
                      for i in range(n_genes)}
         
-        drug_metadata = {
-            'compound': 'TestDrug',
-            'rank': 1,
-            'score': -3.5,
-            'p_value': 0.001,
-            'moa': 'Test inhibitor',
-            'target': 'TEST1, TEST2'
-        }
-        
         # Run explanation
-        from scperturb_cmap.explainability.feature_importance import explain_drug_ranking
         
         result = explain_drug_ranking(
             target_signature=target_dict,

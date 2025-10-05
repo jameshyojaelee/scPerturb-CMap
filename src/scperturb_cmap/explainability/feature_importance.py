@@ -2,12 +2,11 @@
 Gene-level feature importance and SHAP-like contribution analysis
 Explains which genes drive drug rankings and their individual contributions
 """
+from typing import Dict, List, Optional, Sequence, Tuple
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Optional
-import matplotlib.pyplot as plt
-import seaborn as sns
-from scipy.stats import spearmanr, pearsonr
 
 
 class GeneContributionAnalyzer:
@@ -228,9 +227,6 @@ def create_waterfall_plot(
     
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
-    
-    # Calculate cumulative sum for waterfall effect
-    cumsum = np.cumsum(top_genes['contribution'].values)
     
     # Colors: beneficial (blue), detrimental (red)
     colors = ['#2E86AB' if c > 0 else '#A23B72' for c in top_genes['contribution']]
@@ -463,7 +459,9 @@ def rank_gene_importance(
             'frequency_negative': stats['frequency_negative'] / stats['n_drugs'],
             'frequency_top10': stats['frequency_top10'] / len(contributions_list),
             'n_drugs_present': stats['n_drugs'],
-            'consistency': 1 - np.std(stats['mean_contribution']) / (np.abs(np.mean(stats['mean_contribution'])) + 1e-10)
+            'consistency': 1
+            - np.std(stats['mean_contribution'])
+            / (np.abs(np.mean(stats['mean_contribution'])) + 1e-10)
         })
     
     importance_df = pd.DataFrame(importance_rows)
@@ -479,6 +477,21 @@ def rank_gene_importance(
     importance_df = importance_df.sort_values('importance_score', ascending=False)
     
     return importance_df.head(top_n)
+
+
+def compute_gene_contributions(
+    target_signature: Sequence[float],
+    drug_signature: Sequence[float],
+    genes: List[str],
+) -> pd.DataFrame:
+    """Convenience wrapper returning gene contributions for a drug signature."""
+
+    analyzer = GeneContributionAnalyzer()
+    return analyzer.compute_contributions(
+        np.asarray(target_signature, dtype=float),
+        np.asarray(drug_signature, dtype=float),
+        genes,
+    )
 
 
 # Convenience function for single drug analysis

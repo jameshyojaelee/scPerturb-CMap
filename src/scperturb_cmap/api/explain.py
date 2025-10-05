@@ -2,34 +2,31 @@
 Explainability API for scPerturb-CMap scoring results
 Provides high-level interface for generating explanations
 """
+from pathlib import Path
+from typing import Dict, Optional
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple
-from pathlib import Path
 
-from scperturb_cmap.io.schemas import TargetSignature, ScoreResult
 from scperturb_cmap.explainability.feature_importance import (
     GeneContributionAnalyzer,
-    create_waterfall_plot,
     compare_drug_contributions,
-    rank_gene_importance,
-)
-from scperturb_cmap.explainability.pathway_enrichment import (
-    PathwayEnricher,
-    integrate_go_kegg_reactome,
-    create_enrichment_barplot,
-    visualize_pathway_network,
+    create_waterfall_plot,
 )
 from scperturb_cmap.explainability.narrative_generator import (
     DrugNarrativeGenerator,
-    generate_batch_narratives,
     create_comparison_narrative,
+    generate_batch_narratives,
+)
+from scperturb_cmap.explainability.pathway_enrichment import (
+    PathwayEnricher,
+    create_enrichment_barplot,
+    integrate_go_kegg_reactome,
 )
 from scperturb_cmap.explainability.uncertainty import (
     UncertaintyQuantifier,
-    cell_line_specific_predictions,
-    compute_prediction_reliability,
 )
+from scperturb_cmap.io.schemas import ScoreResult, TargetSignature
 
 
 class ExplainabilityEngine:
@@ -294,10 +291,14 @@ class ExplainabilityEngine:
         if output_dir:
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
+            comparison_filename = (
+                f"comparison_{drug_a_metadata['compound']}_vs_"
+                f"{drug_b_metadata['compound']}.png"
+            )
             fig.savefig(
-                output_path / f"comparison_{drug_a_metadata['compound']}_vs_{drug_b_metadata['compound']}.png",
+                output_path / comparison_filename,
                 dpi=300,
-                bbox_inches='tight'
+                bbox_inches='tight',
             )
         
         # Generate narrative
@@ -382,12 +383,12 @@ def explain_top_drugs(
             f.write(f"Rank #{idx+1}: {row['compound']}\n")
             f.write(f"{'='*80}\n\n")
             f.write(row['narrative'])
-            f.write(f"\n\n")
+            f.write("\n\n")
     
     print(f"\nExplanations saved to: {output_dir}/")
-    print(f"  - explained_rankings.parquet")
-    print(f"  - explained_rankings.csv")
-    print(f"  - narratives.txt")
-    print(f"  - Individual plots for each drug")
+    print("  - explained_rankings.parquet")
+    print("  - explained_rankings.csv")
+    print("  - narratives.txt")
+    print("  - Individual plots for each drug")
     
     return explained

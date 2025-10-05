@@ -2,11 +2,11 @@
 Pathway enrichment analysis for top-contributing genes
 Integrates GO, KEGG, and Reactome databases to provide biological context
 """
+import warnings
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Set, Optional, Tuple
-from collections import defaultdict
-import warnings
 
 try:
     import gseapy as gp
@@ -22,7 +22,6 @@ except ImportError:
     NETWORKX_AVAILABLE = False
 
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 
 class PathwayEnricher:
@@ -190,6 +189,27 @@ class PathwayEnricher:
             results['negative'] = pd.DataFrame()
         
         return results
+
+
+def enrich_pathways(
+    gene_list: List[str],
+    background: Optional[List[str]] = None,
+    libraries: Optional[List[str]] = None,
+    p_threshold: float = 0.05,
+    min_genes: int = 3,
+    max_genes: int = 500,
+) -> pd.DataFrame:
+    """Convenience wrapper that enriches a gene set using default settings."""
+
+    enricher = PathwayEnricher()
+    return enricher.enrich_genes(
+        gene_list,
+        background=background,
+        libraries=libraries,
+        p_threshold=p_threshold,
+        min_genes=min_genes,
+        max_genes=max_genes,
+    )
 
 
 def integrate_go_kegg_reactome(

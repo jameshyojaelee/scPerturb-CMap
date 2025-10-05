@@ -2,10 +2,9 @@
 Automated narrative generation explaining drug rankings
 Creates human-readable explanations citing specific gene inversion patterns
 """
-import numpy as np
+from typing import Dict, List, Optional
+
 import pandas as pd
-from typing import Dict, List, Optional, Tuple
-from collections import defaultdict
 
 
 class DrugNarrativeGenerator:
@@ -20,22 +19,29 @@ class DrugNarrativeGenerator:
     def _load_templates(self) -> Dict[str, str]:
         """Load narrative templates"""
         return {
-            'intro': "{drug_name} ({moa}) ranks #{rank} with a connectivity score of {score:.3f} (p={p_value:.4f}).",
-            
-            'mechanism': "This {mechanism_class} acts on {targets}, which {biological_rationale}.",
-            
-            'gene_inversion': "{drug_name} demonstrates strong inversion of {n_genes} key disease genes. "
-                            "Notably, {top_genes_narrative}.",
-            
-            'pathway': "Pathway enrichment analysis reveals {n_pathways} significantly affected pathways (FDR < 0.05), "
-                      "including {top_pathways}.",
-            
-            'cell_line': "These effects were observed in {cell_line} cells, a {cell_line_description} model.",
-            
+            'intro': (
+                "{drug_name} ({moa}) ranks #{rank} with a connectivity score of "
+                "{score:.3f} (p={p_value:.4f})."
+            ),
+            'mechanism': (
+                "This {mechanism_class} acts on {targets}, which {biological_rationale}."
+            ),
+            'gene_inversion': (
+                "{drug_name} demonstrates strong inversion of {n_genes} key disease genes. "
+                "Notably, {top_genes_narrative}."
+            ),
+            'pathway': (
+                "Pathway enrichment analysis reveals {n_pathways} significantly affected "
+                "pathways (FDR < 0.05), including {top_pathways}."
+            ),
+            'cell_line': (
+                "These effects were observed in {cell_line} cells, a {cell_line_description} model."
+            ),
             'validation': "Literature support: {validation_narrative}",
-            
-            'conclusion': "In summary, {drug_name} is predicted to reverse the disease signature through "
-                         "{n_mechanisms} complementary mechanisms, with {confidence_level} confidence."
+            'conclusion': (
+                "In summary, {drug_name} is predicted to reverse the disease signature through "
+                "{n_mechanisms} complementary mechanisms, with {confidence_level} confidence."
+            ),
         }
     
     def generate_narrative(
@@ -136,7 +142,9 @@ class DrugNarrativeGenerator:
         
         rationale_map = {
             'kinase inhibitor': 'blocks aberrant signaling cascades driving disease progression',
-            'hdac inhibitor': 'modulates chromatin accessibility to restore healthy gene expression patterns',
+            'hdac inhibitor': (
+                'modulates chromatin accessibility to restore healthy gene expression patterns'
+            ),
             'proteasome inhibitor': 'prevents degradation of key regulatory proteins',
             'receptor antagonist': 'blocks pathological receptor activation',
             'enzyme inhibitor': 'disrupts metabolic pathways sustaining disease phenotype',
@@ -284,6 +292,28 @@ class DrugNarrativeGenerator:
             n_mechanisms=total_mechanisms,
             confidence_level=confidence
         )
+
+
+def generate_drug_narrative(
+    drug_name: str,
+    rank: int,
+    score: float,
+    p_value: float,
+    contributions: pd.DataFrame,
+    enrichment: Optional[pd.DataFrame] = None,
+    metadata: Optional[Dict] = None,
+) -> str:
+    """Backward-compatible wrapper for narrative generation."""
+
+    return explain_ranking(
+        drug_name=drug_name,
+        rank=rank,
+        score=score,
+        p_value=p_value,
+        contributions=contributions,
+        enrichment=enrichment,
+        metadata=metadata,
+    )
 
 
 def explain_ranking(

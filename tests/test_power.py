@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import anndata as ad
 import numpy as np
 import pandas as pd
-import anndata as ad
 
 from scperturb_cmap.analysis.power import (
     bootstrap_rank_confidence,

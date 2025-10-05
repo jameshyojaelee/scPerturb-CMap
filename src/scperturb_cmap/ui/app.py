@@ -1229,32 +1229,31 @@ def main():
                     value=float(defaults.get("threshold", 0.7)),
                     step=0.05,
                 )
+                corr_options = ["spearman", "pearson", "cosine"]
+                selected_corr = defaults.get("correlation_metric", "spearman")
+                if selected_corr not in corr_options:
+                    selected_corr = "spearman"
                 corr_metric = st.selectbox(
                     "Correlation metric",
-                    ["spearman", "pearson", "cosine"],
-                    index=["spearman", "pearson", "cosine"].index(
-                        defaults.get("correlation_metric", "spearman")
-                        if defaults.get("correlation_metric", "spearman") in {"spearman", "pearson", "cosine"}
-                        else "spearman"
-                    ),
+                    corr_options,
+                    index=corr_options.index(selected_corr),
                 )
+
+                diff_options = ["rank_biserial", "logfc"]
+                default_method = defaults.get(
+                    "method",
+                    st.session_state.get("target_cluster_method", "rank_biserial"),
+                )
+                if default_method not in diff_options:
+                    default_method = "rank_biserial"
                 diff_method = st.selectbox(
                     "Differential method",
-                    ["rank_biserial", "logfc"],
-                    index=["rank_biserial", "logfc"].index(
-                        defaults.get(
-                            "method",
-                            st.session_state.get("target_cluster_method", "rank_biserial"),
-                        )
-                        if defaults.get(
-                            "method",
-                            st.session_state.get("target_cluster_method", "rank_biserial"),
-                        )
-                        in {"rank_biserial", "logfc"}
-                        else "rank_biserial"
-                    ),
+                    diff_options,
+                    index=diff_options.index(default_method),
                 )
-                pseudobulk_default = st.session_state.get("target_context", {}).get("pseudobulk_key")
+
+                target_context = st.session_state.get("target_context", {})
+                pseudobulk_default = target_context.get("pseudobulk_key")
                 pseudobulk_val = st.text_input(
                     "Pseudobulk key (optional)",
                     value=defaults.get("pseudobulk_key", pseudobulk_default or ""),
@@ -1353,32 +1352,31 @@ def main():
                     value=float(defaults.get("threshold", 0.7)),
                     step=0.05,
                 )
+                corr_options = ["spearman", "pearson", "cosine"]
+                selected_corr = defaults.get("correlation_metric", "spearman")
+                if selected_corr not in corr_options:
+                    selected_corr = "spearman"
                 corr_metric = st.selectbox(
                     "Correlation metric",
-                    ["spearman", "pearson", "cosine"],
-                    index=["spearman", "pearson", "cosine"].index(
-                        defaults.get("correlation_metric", "spearman")
-                        if defaults.get("correlation_metric", "spearman") in {"spearman", "pearson", "cosine"}
-                        else "spearman"
-                    ),
+                    corr_options,
+                    index=corr_options.index(selected_corr),
                 )
+
+                diff_options = ["rank_biserial", "logfc"]
+                default_method = defaults.get(
+                    "method",
+                    st.session_state.get("target_cluster_method", "rank_biserial"),
+                )
+                if default_method not in diff_options:
+                    default_method = "rank_biserial"
                 diff_method = st.selectbox(
                     "Differential method",
-                    ["rank_biserial", "logfc"],
-                    index=["rank_biserial", "logfc"].index(
-                        defaults.get(
-                            "method",
-                            st.session_state.get("target_cluster_method", "rank_biserial"),
-                        )
-                        if defaults.get(
-                            "method",
-                            st.session_state.get("target_cluster_method", "rank_biserial"),
-                        )
-                        in {"rank_biserial", "logfc"}
-                        else "rank_biserial"
-                    ),
+                    diff_options,
+                    index=diff_options.index(default_method),
                 )
-                pseudobulk_default = st.session_state.get("target_context", {}).get("pseudobulk_key")
+
+                target_context = st.session_state.get("target_context", {})
+                pseudobulk_default = target_context.get("pseudobulk_key")
                 pseudobulk_val = st.text_input(
                     "Pseudobulk key (optional)",
                     value=defaults.get("pseudobulk_key", pseudobulk_default or ""),
@@ -1580,14 +1578,14 @@ def main():
                     "Score column",
                     value=defaults.get("score_col", "score"),
                 )
+                method_options = ["spearman", "pearson", "kendall", "cosine"]
+                selected_method = defaults.get("method", "spearman")
+                if selected_method not in method_options:
+                    selected_method = "spearman"
                 method = st.selectbox(
                     "Correlation method",
-                    ["spearman", "pearson", "kendall", "cosine"],
-                    index=["spearman", "pearson", "kendall", "cosine"].index(
-                        defaults.get("method", "spearman")
-                        if defaults.get("method", "spearman") in {"spearman", "pearson", "kendall", "cosine"}
-                        else "spearman"
-                    ),
+                    method_options,
+                    index=method_options.index(selected_method),
                 )
                 submitted = st.form_submit_button("Compute stability")
 

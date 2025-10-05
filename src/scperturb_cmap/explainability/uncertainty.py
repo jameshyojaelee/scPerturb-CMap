@@ -2,12 +2,15 @@
 Uncertainty quantification and cell-line-specific predictions
 Provides confidence intervals and prediction reliability metrics
 """
+import warnings
+from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple, Callable
 from scipy import stats
-from collections import defaultdict
-import warnings
+
+if TYPE_CHECKING:
+    from matplotlib.figure import Figure
 
 
 class UncertaintyQuantifier:
@@ -164,6 +167,35 @@ class UncertaintyQuantifier:
             'std': std,
             'cv': std / abs(full_score) if full_score != 0 else np.inf
         }
+
+
+def bootstrap_scoring(
+    target_signature: np.ndarray,
+    drug_signature: np.ndarray,
+    scoring_func: Callable,
+    n_iterations: Optional[int] = None,
+    confidence_level: float = 0.95,
+) -> Dict[str, float]:
+    """Convenience wrapper around :class:`UncertaintyQuantifier`."""
+
+    quantifier = UncertaintyQuantifier(confidence_level=confidence_level)
+    return quantifier.bootstrap_scoring(
+        target_signature,
+        drug_signature,
+        scoring_func,
+        n_iterations=n_iterations,
+    )
+
+
+def compute_confidence_intervals(
+    scores: np.ndarray,
+    method: str = 'percentile',
+    confidence_level: float = 0.95,
+) -> Tuple[float, float]:
+    """Compute confidence intervals using the default quantifier."""
+
+    quantifier = UncertaintyQuantifier(confidence_level=confidence_level)
+    return quantifier.compute_confidence_intervals(scores, method=method)
 
 
 def cell_line_specific_predictions(
@@ -362,7 +394,7 @@ def create_uncertainty_plot(
     top_n: int = 20,
     figsize: Tuple[int, int] = (12, 8),
     output_path: Optional[str] = None
-) -> 'plt.Figure':
+) -> 'Figure':
     """
     Create plot showing predictions with confidence intervals across cell lines
     
@@ -376,7 +408,6 @@ def create_uncertainty_plot(
         Matplotlib figure
     """
     import matplotlib.pyplot as plt
-    import seaborn as sns
     
     # Get top drugs by mean score
     top_drugs = (

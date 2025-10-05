@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
-
 from numpy.random import default_rng
 
 try:  # Optional SciPy dependency
@@ -27,7 +26,12 @@ class SampleSizeResult:
     baseline_cells: int
 
 
-def _validate_adata_cluster(adata, cluster_key: str, cluster: str, reference: str) -> Tuple[np.ndarray, np.ndarray]:
+def _validate_adata_cluster(
+    adata,
+    cluster_key: str,
+    cluster: str,
+    reference: str,
+) -> Tuple[np.ndarray, np.ndarray]:
     if cluster_key not in adata.obs.columns:
         raise KeyError(f"cluster_key '{cluster_key}' not present in adata.obs")
     labels = adata.obs[cluster_key].astype(str)
@@ -196,7 +200,9 @@ def estimate_signature_sample_size(
     )
 
 
-def _resolve_aggregate(agg: Union[str, Callable[[np.ndarray, int], np.ndarray]]) -> Callable[[np.ndarray, int], np.ndarray]:
+def _resolve_aggregate(
+    agg: Union[str, Callable[[np.ndarray, int], np.ndarray]],
+) -> Callable[[np.ndarray, int], np.ndarray]:
     if callable(agg):
         return agg
 
@@ -255,7 +261,6 @@ def bootstrap_rank_confidence(
     agg_fn = _resolve_aggregate(aggfunc)
     rng = default_rng(random_state)
     ids = pivot.columns.to_list()
-    n_ids = len(ids)
     n_reps = pivot.shape[0]
 
     observed_scores = agg_fn(pivot.to_numpy(dtype=float), axis=0)
