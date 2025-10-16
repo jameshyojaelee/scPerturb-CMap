@@ -1,10 +1,10 @@
 # scPerturb-CMap
 
-_From single-cell disease signatures to ranked drug repurposing hypotheses—within hours._
+_From single-cell disease signatures to ranked drug repurposing hypotheses within hours._
 
 The Broad Connectivity Map (LINCS L1000) captures millions of empirically measured drug responses. scPerturb-CMap is the bridge that lets single-cell researchers mine that atlas without rebuilding perturbation screens from scratch. Starting with a troublesome or rare cell population (e.g., EMT-like tumor cells, IFN-high macrophages, exhausted T cells), you derive a gene signature and immediately query the L1000 treasury for compounds proven to push cells in the opposite direction. In place of months-long screening campaigns, you generate ordered, testable drug hypotheses the same day—complete with effect sizes, z-scores, p-values, QC stats, and mechanism-of-action enrichments.
 
-Under the hood, scPerturb-CMap blends a fast statistical baseline with a learned DualEncoder metric model trained on known inversion pairs. This machine learning component learns embeddings for targets and perturbations and is blended with the baseline at inference to sharpen ranking accuracy.
+scPerturb-CMap blends a fast statistical baseline with a learned DualEncoder metric model trained on known inversion pairs. This machine learning component learns embeddings for targets and perturbations and is blended with the baseline at inference to sharpen ranking accuracy.
 
 Why use scPerturb-CMap:
 1. **Targets the “undruggable.”** Rare states no longer disappear in bulk averages; ranking is driven by the exact cluster causing pathology.
@@ -29,30 +29,6 @@ The package ships with:
 - CLI utilities for LINCS ingestion, target construction, scoring, and training,
 - a Streamlit UI for interactive analysis.
 
----
-
-## Table of Contents
-1. [Concept Overview](#concept-overview)
-2. [Feature Highlights](#feature-highlights)
-3. [Installation](#installation)
-4. [Quickstart](#quickstart)
-5. [End-to-End Workflow](#end-to-end-workflow)
-6. [Reference Figures](#reference-figures)
-7. [Repository Layout](#repository-layout)
-8. [Command-Line Essentials](#command-line-essentials)
-9. [Explainability Framework](#explainability-framework)
-10. [Cloud Deployment](#cloud-deployment)
-11. [Case Studies](#case-studies)
-12. [Development Workflow](#development-workflow)
-13. [Additional Resources](#additional-resources)
-14. [License](#license)
-17. [HPC Notes](#hpc-notes)
-18. [FAQ](#faq)
-19. [Citation & Publications](#citation--publications)
-20. [Community & Support](#community--support)
-21. [License](#license)
-
----
 
 ## Concept Overview
 
@@ -74,62 +50,6 @@ Supported data contracts:
 
 *Figure 1. Single-cell targets align to curated L1000 signatures before the baseline and DualEncoder branches blend into a ranked compound readout.*
 
----
-
-## Significant Breakthroughs
-
-scPerturb-CMap represents several firsts in computational drug repurposing:
-
-1. **Single-Cell to Drug Atlas Bridge**: First systematic connection between rare cell states in scRNA-seq data and the 1.3M+ signature LINCS L1000 library
-2. **Hybrid Intelligence**: Novel combination of statistical baseline (cosine + GSEA ensemble) with metric learning (DualEncoder) for superior ranking accuracy
-3. **Cell-State Precision**: Targets specific pathological clusters (e.g., EMT cells, exhausted T cells) that disappear in bulk averages
-4. **Hours Not Months**: Reduces drug screening hypothesis generation from 6-12 months of wet-lab work to same-day computational predictions
-5. **Statistical Rigor**: Full statistical framework with z-scores, p-values, FDR correction, and MOA enrichment analysis
-6. **Production Ecosystem**: Complete with CLI, Python API, Streamlit UI, HPC integration, comprehensive tests, and CI/CD
-
----
-
-## Use Cases for Biologists
-
-### Precision Medicine Workflows
-
-**Patient-Derived Signatures → Repurposing**
-```bash
-# Extract pathological cluster from patient tumor
-scperturb-cmap make-target \
-  --h5ad patient_tumor.h5ad \
-  --cluster-key leiden \
-  --cluster "mesenchymal_like" \
-  --output patient_signature.json
-
-# Query LINCS for FDA-approved reversers
-scperturb-cmap score \
-  --target-json patient_signature.json \
-  --library lincs_full.parquet \
-  --cell-line A549 \
-  --top-k 50 \
-  --output repurposing_candidates.parquet
-```
-
-### Common Applications
-
-| Use Case | Cell State | Expected Output |
-|----------|------------|-----------------|
-| **Cancer stem cells** | CD44+/CD24- breast cancer | Differentiation-inducing agents, pathway inhibitors |
-| **T cell exhaustion** | PD1+/TIM3+/LAG3+ CD8+ T cells | Immune checkpoint alternatives, metabolic modulators |
-| **EMT** | VIM+/CDH1- epithelial cells | MET inducers, TGFβ pathway inhibitors |
-| **Fibrosis** | Activated myofibroblasts | Anti-fibrotic compounds, ECM remodelers |
-| **Inflammation** | IFN-high macrophages | Anti-inflammatory drugs, JAK/STAT inhibitors |
-
-### Real-World Impact
-
-- **Speed**: Generate testable hypotheses in hours vs. months of experimental screening
-- **Cost**: Reduce early-stage screening costs by 10-100x
-- **Rare diseases**: Enable drug discovery for conditions too rare for traditional screens
-- **Repurposing**: Identify new uses for FDA-approved drugs (faster path to clinic)
-- **Mechanism discovery**: MOA enrichment reveals unexpected biological insights
-
----
 
 ## Feature Highlights
 
@@ -198,9 +118,6 @@ make test
 
 > **Python**: 3.10+ is required. All commands above assume GNU Make and a POSIX shell.
 
----
-
-## End-to-End Workflow
 
 1. **Prepare the library** – Convert or download LINCS L1000 signatures into a long-form Parquet/CSV table (`scperturb-cmap prepare-lincs`) and keep them under `data/lincs/` or another Arrow-friendly location.
 2. **Build a target signature** – Derive up/down weights from an AnnData object or curated gene lists using `scperturb-cmap make-target` (or the Streamlit UI). Inspect QC summaries before moving on.
@@ -209,9 +126,6 @@ make test
 5. **Explore interactively** – Launch `make ui` to open the Streamlit dashboard, re-use existing targets, and export ranked hypotheses with MOA enrichment plots for bench scientists.
 6. **Validate & automate** – Use `make acceptance` for smoke tests, `make lint`/`make test` in CI, and the HPC scripts under `scripts/slurm/` for batch jobs.
 
----
-
-## Reference Figures
 
 **Recall@50 by cell line**
 
@@ -231,56 +145,7 @@ make test
 
 *Figure 4. Blended connectivity scores for the top-ranked compounds in the NSCLC case study, with annotations for the leading hits.*
 
----
-
-## Repository Layout
-
-### Core Directories
-- **`src/scperturb_cmap/`** – Python package with CLI, API, data loaders, models, UI, and explainability framework
-- **`tests/`** – Comprehensive test suite (90%+ coverage) including explainability tests
-- **`examples/`** – Demo data, scripts, and outputs for tutorials
-- **`scripts/`** – Automation helpers (data prep, HPC wrappers, API server)
-
-### Documentation (Organized)
-- **`docs/`** – Comprehensive documentation
-  - `docs/guides/` – Detailed guides (changelog, roadmap, features)
-  - `docs/contributing/` – Contribution guidelines and developer docs
-  - `docs/deployment/` – Cloud deployment documentation
-  - `docs/cases/` – Brief case study overviews
-
-### Case Studies
-- **`case_studies/`** – Three complete real-world examples
-  - `nsclc_cd8/` – NSCLC CD8+ T cell exhaustion
-  - `emt_breast/` – EMT in triple-negative breast cancer
-  - `ifn_macrophages/` – IFN-high macrophages in inflammatory disease
-
-### Deployment (Production-Ready)
-- **`deployment/`** – Production deployment configurations
-  - `deployment/docker/` – Dockerfiles and docker-compose
-  - `deployment/kubernetes/helm/` – Helm charts with auto-scaling
-  - `deployment/aws/` – CloudFormation templates, Lambda functions
-  - `deployment/gcp/` – GKE and Cloud Functions configs
-  - `deployment/ci/` – CI/CD pipeline configurations
-  - `deployment/prometheus/` – Monitoring configs
-  - `deployment/grafana/` – Dashboards
-
-### Data & Results
-- **`data/`** – LINCS libraries and single-cell datasets (git-ignored)
-- **`results/`** – Analysis outputs
-- **`figs/`** – Generated figures and plots
-- **`workspace/`** – Runtime workspace (artifacts, logs, cache)
-
-### Configuration
-- **`pyproject.toml`** – Python package configuration
-- **`Makefile`** – Development commands
-- **`mkdocs.yml`** – Documentation site config
-- **`environment.yml`** – Conda environment
-
 See **[STRUCTURE.md](STRUCTURE.md)** for complete directory tree and navigation guide.
-
----
-
-## Command-Line Essentials
 
 | Command | Purpose |
 | --- | --- |
@@ -292,9 +157,6 @@ See **[STRUCTURE.md](STRUCTURE.md)** for complete directory tree and navigation 
 
 Python APIs mirror the CLI; see `src/scperturb_cmap` for modules such as `api.score`, `data.pairs`, and `models.train`.
 
----
-
-## Training on Real Inversion Pairs
 
 1. **Assemble positives**: create a table with at least `target_id` and `signature_id`. Use `prepare_pair_table(...)` to attach negatives or supply a `label` column (1 = inversion, 0 = non-inversion).
 2. **Export target JSON Lines**: each record must include `target_id`, `genes`, and `weights`. The CLI generator (`make-target --qc-report`) can write both the JSON target and a QC summary.
@@ -312,9 +174,6 @@ scperturb-cmap train \
 
 The trainer auto-infers the gene dimension, logs metrics in `workspace/artifacts/metrics.json`, and writes `workspace/artifacts/best.pt`. You can point scoring runs to that checkpoint via `--method metric --model-path workspace/artifacts/best.pt`.
 
----
-
-## Preparing LINCS L1000 Data
 
 Use the built-in converter when you have raw Level 5 assets:
 
@@ -340,9 +199,6 @@ Tips:
 - For very large libraries, prefer `--partition-by cell_line` and use `--cell-lines` during scoring to leverage Arrow predicate pushdown.
 - A validation script (`python scripts/validators/validate_parquet_dataset.py --dataset …`) summarizes partition counts and schema consistency.
 
----
-
-## Streamlit UI
 ![Streamlit UI](docs/assets/ui.png)
 `make ui` launches a browser app that:
 - loads the demo LINCS table by default (override with `--lincs <path>` or `SCPC_LINCS`),
@@ -355,9 +211,6 @@ Tips:
 Example top-20 predicted inversions (NSCLC CD8+ T target):
 ![Top-20 NSCLC](docs/assets/top20_nsclc.png)
 
----
-
-## Acceptance & Quality Gates
 
 The project defines three acceptance checks:
 1. Baseline scoring on the demo completes in <60 seconds and emits z-scores/p-values.
@@ -372,77 +225,10 @@ make acceptance
 
 The script scores the demo, materialises `examples/out/metric_dataset/` (synthetic but structured like real inversion pairs), trains the DualEncoder against those files, and ensures recall@5 improves by ≥10 percentage points.
 
----
-
-## Development Workflow
-
-- **Linting & tests**: `make lint`, `make test`
-- **Acceptance harness**: `make acceptance`
-- **CI**: GitHub Actions installs the project via `make setup` then runs lint + tests.
-- **Code style**: formatted/checked with Ruff (line length ≤100). Python 3.10 target version.
-
-Contributions welcome—see `CONTRIBUTING.md` for detailed guidance.
-
----
-
-## Future Enhancements
-
-Potential improvements for future development:
-
-- **Batch Processing**: Multi-target comparative analysis with heatmaps and clustering
-- **Enhanced Gene Mapping**: HGNC/Ensembl integration with fuzzy matching and disambiguation
-- **Safety Integration**: DrugBank + Tox21 toxicity predictions and safety filters
-- **Advanced Query DSL**: SQL-like filtering with saved presets
-- **Spatial Transcriptomics**: Visium/MERFISH neighborhood-aware signatures
-- **Multi-Omics Integration**: CITE-seq + ATAC-seq + metabolomics
-- **Power Analysis Suite**: Sample size calculators and signature stability metrics
-
----
-
-## HPC Notes
-
 Cluster-specific setup, Slurm examples, and environment hints live in [`docs/hpc.md`](docs/hpc.md). In short:
 - `make hpc-setup` provisions an environment (Conda if available, otherwise venv).
 - `scripts/*.sbatch` provide job templates for data conversion, scoring, training, and UI tunnels.
 - Respect site-specific module requirements (e.g., load CUDA before launching GPU jobs).
-
----
-
-## FAQ
-
-**Q: How many cells do I need per cluster for a robust signature?**  
-A: We recommend ≥200 cells for stable signatures. Use `--pseudobulk-key` if you have biological replicates to improve robustness. For very rare populations, consider pooling across patients or time points.
-
-**Q: What if my genes don't overlap well with LINCS?**  
-A: Use `--library-genes data/l1000_landmarks.txt` with `make-target` to pre-filter and generate a QC report. LINCS L1000 covers 978 landmark genes; aim for ≥150 overlapping genes for reliable results.
-
-**Q: Can I use this for non-human data?**  
-A: LINCS is human-specific. For mouse data, use ortholog mapping (e.g., via Ensembl Biomart or the biomaRt R package) before creating signatures. Note that cell-line context may still differ.
-
-**Q: How do I interpret MOA enrichment results?**  
-A: Enriched MOAs suggest mechanistic hypotheses. For example, "kinase inhibitor" enrichment indicates kinase pathway involvement in your signature. Use the odds ratio and p-value to prioritize mechanisms. Cross-reference with pathway databases for biological validation.
-
-**Q: What's the difference between baseline and metric methods?**  
-A: **Baseline** uses cosine+GSEA ensemble (fast, no training needed, interpretable). **Metric** adds learned embeddings from a DualEncoder trained on inversion pairs (better accuracy, requires training data). Start with baseline; use metric if you have validated inversion pairs.
-
-**Q: Can I add my own perturbation library?**  
-A: Yes! Any long-form table with columns `signature_id, compound, cell_line, gene_symbol, score` works. See the custom library documentation and use `prepare-lincs` as a template.
-
-**Q: How do I choose between different cell lines in LINCS?**  
-A: Prioritize cell lines matching your tissue of origin. Use `--cell-lines A549 MCF7 PC3` to query multiple. The Streamlit UI shows cell-line-specific heatmaps to compare results.
-
-**Q: What does a negative connectivity score mean?**  
-A: In the baseline method, **lower (more negative) scores indicate stronger inversion** – the compound reverses your signature. In metric mode, the same convention applies after blending.
-
-**Q: How can I validate the top-ranked compounds?**  
-A: (1) Check literature for known effects in your disease context, (2) Review MOA for biological plausibility, (3) Examine dose-response in LINCS, (4) Test top 3-5 compounds in your experimental system, (5) Consider orthogonal validation (e.g., in vivo models).
-
-**Q: Can I use this for combination therapy predictions?**  
-A: Not directly in v0.2.0. Future versions will support multi-compound queries. Currently, you can score each compound individually and use MOA enrichment to identify synergistic mechanisms.
-
----
-
-## Citation & Publications
 
 If you use scPerturb-CMap in your research, please cite:
 
@@ -457,16 +243,6 @@ If you use scPerturb-CMap in your research, please cite:
 }
 ```
 
-### Publications Using scPerturb-CMap
-
-We track research using scPerturb-CMap. If you publish with this tool, please let us know via GitHub Discussions or email to be added here.
-
-**Preprints & Papers:**
-- _(To be populated as studies are published)_
-
-**Posters & Presentations:**
-- _(To be populated as studies are presented)_
-
 ### Related Work
 
 scPerturb-CMap builds on and complements these foundational tools:
@@ -476,40 +252,7 @@ scPerturb-CMap builds on and complements these foundational tools:
 - **scGen**: Lotfollahi et al. (2019) *Nature Methods* - Single-cell perturbation prediction
 - **Scanpy**: Wolf et al. (2018) *Genome Biology* - Single-cell analysis framework
 
----
 
-## Community & Support
-
-### Getting Help
-
-- **Documentation**: [https://scperturb-cmap.readthedocs.io](https://scperturb-cmap.readthedocs.io) _(coming soon)_
-- **GitHub Discussions**: [Ask questions, share use cases](https://github.com/jameslee/scPerturb-CMap/discussions)
-- **GitHub Issues**: [Report bugs, request features](https://github.com/jameslee/scPerturb-CMap/issues)
-- **Email**: For sensitive inquiries, contact the maintainers via GitHub profile
-
-### Contributing
-
-We welcome contributions! Priority areas:
-- **Validation studies**: Real-world case studies with experimental confirmation
-- **Benchmarking**: Comparison against literature-validated disease-drug pairs
-- **New features**: Implement roadmap items or propose new capabilities
-- **Documentation**: Tutorials, examples, use case narratives
-- **Bug reports**: Help us improve stability and usability
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed guidelines.
-
-### Acknowledgments
-
-This project uses data from:
-- **LINCS Program**: NIH Common Fund
-- **Broad Institute**: CMap team
-- **Community**: Open-source Python ecosystem (PyTorch, Scanpy, Pandas, Arrow, Streamlit)
-
-Special thanks to early adopters and beta testers for valuable feedback.
-
----
-
-## Explainability Framework
 
 scPerturb-CMap includes a comprehensive explainability framework providing SHAP-like interpretability:
 
@@ -536,40 +279,6 @@ explained = engine.explain_top_k_drugs(
 print(explained[['compound', 'score', 'narrative']])
 ```
 
-**Documentation**: See **[docs/explainability.md](docs/explainability.md)** and **[docs/guides/EXPLAINABILITY_FEATURES.md](docs/guides/EXPLAINABILITY_FEATURES.md)**
-
----
-
-## Cloud Deployment
-
-Production-ready deployment infrastructure for AWS, GCP, and Kubernetes:
-
-- **Kubernetes Helm charts** with auto-scaling (HPA) and monitoring
-- **AWS**: ECS/Fargate, Lambda serverless API, S3 optimized storage
-- **GCP**: GKE, Cloud Functions, GCS with lifecycle policies
-- **Docker**: Multi-stage production builds with LINCS caching
-- **Monitoring**: Prometheus, Grafana, CloudWatch, Cloud Monitoring
-- **CI/CD**: GitHub Actions and GitLab pipelines
-
-```bash
-# Deploy to Kubernetes
-helm install scperturb-cmap ./deployment/kubernetes/helm/scperturb-cmap
-
-# Deploy to AWS Lambda (serverless)
-aws cloudformation deploy \
-  --template-file deployment/aws/cloudformation/lambda-api.yaml \
-  --stack-name scperturb-cmap-lambda
-
-# Deploy to GCP Cloud Functions
-cd deployment/gcp/cloud-functions && bash deploy.sh
-```
-
-**Documentation**: See **[docs/deployment/CLOUD_DEPLOYMENT.md](docs/deployment/CLOUD_DEPLOYMENT.md)** and **[deployment/README.md](deployment/README.md)**
-
----
-
-## Case Studies
-
 Three comprehensive real-world case studies with full workflow examples:
 
 ### 1. NSCLC CD8+ T Cell Exhaustion
@@ -591,9 +300,6 @@ Each case study includes:
 - Literature citations
 - MOA enrichment analysis
 
----
-
-## Additional Resources
 
 ### Documentation
 - **[Quick Start Guide](docs/quickstart.md)** - Get started in 5 minutes
@@ -614,7 +320,3 @@ Each case study includes:
 - **[CI/CD](deployment/ci/README.md)** - Continuous integration
 
 ---
-
-## License
-
-MIT License – see [`LICENSE`](LICENSE).
