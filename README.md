@@ -262,21 +262,6 @@ scPerturb-CMap includes a comprehensive explainability framework providing SHAP-
 - **Cell-line-specific predictions**: With bootstrap confidence intervals
 - **Comparison mode**: Explains why Drug A ranks higher than Drug B
 
-```python
-from scperturb_cmap.api.explain import ExplainabilityEngine
-
-engine = ExplainabilityEngine(enable_pathway_enrichment=True)
-explained = engine.explain_top_k_drugs(
-    target_signature=target,
-    score_result=results,
-    library=library,
-    top_k=20,
-    output_dir='explanations'
-)
-
-# View automated narratives
-print(explained[['compound', 'score', 'narrative']])
-```
 
 Three comprehensive real-world case studies with full workflow examples:
 
@@ -306,16 +291,3 @@ Each case study includes:
 - **[CLI Reference](docs/cli.md)** - Command-line interface guide
 - **[HPC Deployment](docs/hpc.md)** - Cluster deployment notes
 - **[Explainability Guide](docs/explainability.md)** - Interpretability framework
-
-### Development
-- **[Contributing Guide](docs/contributing/CONTRIBUTING.md)** - How to contribute
-- **[Changelog](docs/guides/CHANGELOG.md)** - Version history
-- **[Repository Structure](STRUCTURE.md)** - Complete directory tree
-
-### Deployment
-- **[Cloud Deployment](docs/deployment/CLOUD_DEPLOYMENT.md)** - AWS/GCP deployment
-- **[Docker Guide](deployment/docker/README.md)** - Container deployment
-- **[Helm Charts](deployment/kubernetes/helm/)** - Kubernetes deployment
-- **[CI/CD](deployment/ci/README.md)** - Continuous integration
-
----
