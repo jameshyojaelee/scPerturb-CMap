@@ -253,7 +253,6 @@ scPerturb-CMap builds on and complements these foundational tools:
 - **Scanpy**: Wolf et al. (2018) *Genome Biology* - Single-cell analysis framework
 
 
-
 scPerturb-CMap includes a comprehensive explainability framework providing SHAP-like interpretability:
 
 - **Gene-level attribution**: Which specific genes drive each drug's ranking
