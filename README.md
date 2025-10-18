@@ -1,14 +1,8 @@
 # scPerturb-CMap
 
-The Broad Connectivity Map (LINCS L1000) captures millions of empirically measured drug responses. scPerturb-CMap is the bridge that lets single-cell researchers mine that atlas without rebuilding perturbation screens from scratch. Starting with a troublesome or rare cell population (e.g., EMT-like tumor cells, IFN-high macrophages, exhausted T cells), you derive a gene signature and immediately query the L1000 treasury for compounds proven to push cells in the opposite direction. In place of months-long screening campaigns, you generate ordered, testable drug hypotheses the same day—complete with effect sizes, z-scores, p-values, QC stats, and mechanism-of-action enrichments.
+The Broad Connectivity Map (LINCS L1000) captures millions of empirically measured drug responses. scPerturb-CMap is the bridge that lets single-cell researchers mine that atlas without rebuilding perturbation screens from scratch. Starting with a troublesome or rare cell population (e.g., EMT-like tumor cells, IFN-high macrophages, exhausted T cells), you derive a gene signature and immediately query the L1000 treasury for compounds proven to push cells in the opposite direction. 
 
-scPerturb-CMap blends a fast statistical baseline with a learned DualEncoder metric model trained on known inversion pairs. This machine learning component learns embeddings for targets and perturbations and is blended with the baseline at inference to sharpen ranking accuracy.
-
-Why use scPerturb-CMap:
-1. **Targets the “undruggable.”** Rare states no longer disappear in bulk averages; ranking is driven by the exact cluster causing pathology.
-2. **Leverages a decade of data.** Mine the public L1000 archive before expensive single-cell perturbation experiments.
-3. **Accelerates repurposing.** Connect patient-derived or experimental signatures to approved/investigational compounds with immediate readouts for bench validation.
-4. **Democratises analysis.** Fits existing workflows (AnnData `.h5ad`, curated gene lists, LINCS Parquet), and ships with CLI, Python API, and Streamlit UI for mixed computational/experimental teams.
+scPerturb-CMap allows users to use L1000 CMap data to rank compounds that are most likely to reverse pathological cell states within their own single-cell RNA-seq datasets, enabling rapid, data-driven drug repurposing prediction for bench validation
 
 #### How scPerturb-CMap differs from scGen / scPerturb
 
@@ -36,15 +30,6 @@ Traditional connectivity mapping averages bulk transcriptomes and may miss rare 
 
 *Figure 1. Single-cell targets align to curated L1000 signatures before the baseline and DualEncoder branches blend into a ranked compound readout.*
 
-## Feature Highlights
-
-- **Baseline ensemble** – cosine connectivity + GSEA, exported with z-scores and double-sided p-values.
-- **Metric learning** – DualEncoder trained with NT-Xent or triplet loss on real or synthetic inversion pairs; blended with the baseline at inference.
-- **Replicate-aware preprocessing** – optional MODZ collapsing (`--collapse-replicates`) when `replicate_id` is present.
-- **Target engineering** – pseudobulk grouping (`--pseudobulk-key`), QC summaries (gene balance, overlap with LINCS), and JSON/CSV exports.
-- **Pair generation helpers** – utilities under `scperturb_cmap.data.pairs` to sample positives/negatives from LINCS metadata.
-- **Rich analytics** – Streamlit UI exposing target QC, MOA enrichment bars, and cell-line heatmaps.
-
 ---
 
 ## Installation
@@ -63,8 +48,6 @@ make setup
 conda env create -f environment.yml
 conda activate scperturb-cmap
 ```
-
-Generated artifacts default to the `workspace/` directory (checkpoints under `workspace/artifacts/`, logs under `workspace/logs/`, documentation builds under `workspace/site/`). Point environment variables (e.g., `SCPC_MODEL`) there when running from a fresh install.
 
 ---
 
@@ -113,7 +96,6 @@ make test
 ```
 
 > **Python**: 3.10+ is required. All commands above assume GNU Make and a POSIX shell.
-
 
 1. **Prepare the library** – Convert or download LINCS L1000 signatures into a long-form Parquet/CSV table (`scperturb-cmap prepare-lincs`) and keep them under `data/lincs/` or another Arrow-friendly location.
 2. **Build a target signature** – Derive up/down weights from an AnnData object or curated gene lists using `scperturb-cmap make-target` (or the Streamlit UI). Inspect QC summaries before moving on.
