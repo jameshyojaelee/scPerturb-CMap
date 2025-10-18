@@ -8,11 +8,7 @@ All notable changes to this project will be documented in this file.
 - New end-to-end workflow and repository layout documentation for release readiness.
 - CITATION metadata for academic users (see `CITATION.cff`).
 ### Ready for 0.2.0 GA
-- Documented LINCS licensing/attribution requirements and linked the CLUE distribution portal.
-- Recorded `make acceptance` runtime expectations (with OpenSSL module guidance) and validated the target on current hardware.
-- Launched the Streamlit UI headlessly to confirm exports/bookmarks still initialise without errors—no visual changes required, so screenshots remain intact.
-- Ran `codespell` across README/docs (ignoring domain-specific terms) and cleaned the only hit.
-- Pruned stray Hydra outputs under `examples/out/previous_runs/` and tightened `.gitignore` for transient run folders.
+scPerturb-CMap 0.2.0 lands with env-driven API configuration (cache TTLs, request guardrails, LINCS/Redis/Postgres readiness probes), refreshed docs anchored around acceptance runtimes (~30 s with `module load openssl/1.1`), and deployment guidance spanning Docker, Helm, and cloud checklists. Packaging and QA were validated via `make acceptance`, `pytest -q`, a dry-run wheel install, and headless Streamlit smoke tests; outstanding actions include bumping FastAPI/Starlette/H11/pyarrow to close pip-audit advisories, running full Streamlit flows in a browser, and rendering Helm charts in a Helm-enabled environment. Security notes live in `SECURITY.md`, and LINCS CC BY 4.0 attribution remains front and centre so downstream teams stay compliant.
 
 ### Changed
 - Consolidated generated artifacts under `workspace/` and updated tooling to use environment Python.

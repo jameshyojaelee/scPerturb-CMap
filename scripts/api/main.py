@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 
 APP_VERSION = "0.2.0"
 settings = get_api_settings()
+CONTENT_TOO_LARGE = (
+    status.HTTP_413_CONTENT_TOO_LARGE
+    if hasattr(status, "HTTP_413_CONTENT_TOO_LARGE")
+    else status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+)
 
 
 def _runtime_settings() -> ApiSettings:
@@ -54,7 +59,7 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
             try:
                 if int(content_length) > self.max_body_size:
                     detail = f"Request payload exceeds {self.max_body_size} bytes"
-                    status_code = status.HTTP_413_CONTENT_TOO_LARGE
+                    status_code = CONTENT_TOO_LARGE
                     return JSONResponse(
                         status_code=status_code,
                         content={
@@ -66,22 +71,10 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
                         },
                     )
             except ValueError:
-                pass
-
-        body = await request.body()
-        if len(body) > self.max_body_size:
-            detail = f"Request payload exceeds {self.max_body_size} bytes"
-            status_code = status.HTTP_413_CONTENT_TOO_LARGE
-            return JSONResponse(
-                status_code=status_code,
-                content={
-                    "error": {
-                        "type": "http_error",
-                        "message": detail,
-                        "status": status_code,
-                    }
-                },
-            )
+                logger.debug(
+                    "Unable to parse content-length header '%s'; allowing request to proceed",
+                    content_length,
+                )
 
         return await call_next(request)
 
