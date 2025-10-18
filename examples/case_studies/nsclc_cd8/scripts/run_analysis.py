@@ -20,11 +20,12 @@ from scperturb_cmap.io.schemas import TargetSignature
 
 app = typer.Typer(add_completion=False)
 
+REPO_ROOT = Path(__file__).resolve().parents[4]
 CASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_TARGET = CASE_DIR / "data" / "target.json"
-DEFAULT_LIBRARY = Path(__file__).resolve().parents[3] / "examples" / "data" / "lincs_demo.parquet"
+DEFAULT_LIBRARY = REPO_ROOT / "examples" / "data" / "lincs_demo.parquet"
 DEFAULT_RESULTS = CASE_DIR / "results"
-DEFAULT_MODEL = Path(__file__).resolve().parents[3] / "workspace" / "artifacts" / "best.pt"
+DEFAULT_MODEL = REPO_ROOT / "workspace" / "artifacts" / "best.pt"
 
 
 def _load_target(path: Path) -> TargetSignature:
@@ -110,4 +111,3 @@ def main(
 
 if __name__ == "__main__":
     app()
-

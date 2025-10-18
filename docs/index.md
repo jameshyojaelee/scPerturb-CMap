@@ -29,5 +29,5 @@ The demo builds bundle small LINCS L1000 excerpts purely for smoke tests. Produc
 
 - Build your first analysis via the [Quickstart](quickstart.md).
 - Dive into tooling in the [CLI reference](cli.md) and [API reference](api.md).
-- Explore case studies under `case_studies/` or the [Case Studies](cases/index.md) section.
+- Explore case studies under `examples/case_studies/` or the [Case Studies](cases/index.md) section.
 - Review deployment options in the [Cloud guide](deployment/CLOUD_DEPLOYMENT.md) and accompanying Docker/Helm docs.

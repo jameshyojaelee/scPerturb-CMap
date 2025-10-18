@@ -70,7 +70,7 @@ so PyArrow and Streamlit have access to the expected OpenSSL runtime.
 
 ## Next Steps
 
-- Work through the case-study scripts under `case_studies/*/scripts/run_analysis.py`.
+- Work through the case-study scripts under `examples/case_studies/*/scripts/run_analysis.py`.
 - Fine-tune the DualEncoder with `scperturb-cmap train`.
 - Read the [CLI reference](cli.md) and [API reference](api.md) for additional
   automation hooks.

@@ -125,7 +125,7 @@ make test
 
 *Figure 4. Blended connectivity scores for the top-ranked compounds in the NSCLC case study, with annotations for the leading hits.*
 
-See **[STRUCTURE.md](STRUCTURE.md)** for complete directory tree and navigation guide.
+See **[docs/reference/repository_structure.md](docs/reference/repository_structure.md)** for a directory overview and navigation tips.
 
 | Command | Purpose |
 | --- | --- |
@@ -247,15 +247,15 @@ Three comprehensive real-world case studies with full workflow examples:
 
 ### 1. NSCLC CD8+ T Cell Exhaustion
 Reversing immune exhaustion with top-20 validated compounds and literature citations.  
-**See**: [case_studies/nsclc_cd8/CASE_STUDY_NSCLC_CD8.md](case_studies/nsclc_cd8/CASE_STUDY_NSCLC_CD8.md)
+**See**: [examples/case_studies/nsclc_cd8/CASE_STUDY_NSCLC_CD8.md](examples/case_studies/nsclc_cd8/CASE_STUDY_NSCLC_CD8.md)
 
 ### 2. EMT in Triple-Negative Breast Cancer
 EMT reversal with MOA pathway analysis and experimental validation plan.  
-**See**: [case_studies/emt_breast/CASE_STUDY_EMT_BREAST.md](case_studies/emt_breast/CASE_STUDY_EMT_BREAST.md)
+**See**: [examples/case_studies/emt_breast/CASE_STUDY_EMT_BREAST.md](examples/case_studies/emt_breast/CASE_STUDY_EMT_BREAST.md)
 
 ### 3. IFN-High Macrophages
 Cell-line-specific predictions for inflammatory disease with confidence intervals.  
-**See**: [case_studies/ifn_macrophages/CASE_STUDY_IFN_MACROPHAGES.md](case_studies/ifn_macrophages/CASE_STUDY_IFN_MACROPHAGES.md)
+**See**: [examples/case_studies/ifn_macrophages/CASE_STUDY_IFN_MACROPHAGES.md](examples/case_studies/ifn_macrophages/CASE_STUDY_IFN_MACROPHAGES.md)
 
 Each case study includes:
 - Complete .h5ad → ranked drugs workflow
