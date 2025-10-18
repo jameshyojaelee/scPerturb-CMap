@@ -1,3 +1,0 @@
-signature_id,compound,cell_line,gene_symbol,score,moa,target
-sig1,cmpd1,A375,CDK1,1.0,kinase,MAPK
-sig1,cmpd1,A375,EGFR,-1.0,kinase,MAPK
