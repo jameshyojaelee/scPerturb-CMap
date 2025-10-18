@@ -30,24 +30,11 @@ The package ships with:
 
 ## Concept Overview
 
-Traditional connectivity mapping averages bulk transcriptomes and may miss rare cell states. scPerturb-CMap instead works with single-cell targets:
-
-```
-  scRNA-seq (.h5ad) ──► build target signature (genes, weights)
-                              │
-                              ▼
-  LINCS long-form library ──► score (baseline | metric blend) ──► ranked drugs
-```
-
-Supported data contracts:
-- **Target** (`TargetSignature` JSON): `{"genes": [...], "weights": [...], "metadata": {...}}`
-- **LINCS long** (Parquet/CSV/TSV): `signature_id, compound, cell_line, gene_symbol, score` (+ optional `moa, target, replicate_id`, etc.)
-- **Results** (Parquet/CSV): `signature_id, compound, cell_line, score, moa?, target?`
+Traditional connectivity mapping averages bulk transcriptomes and may miss rare cell states. scPerturb-CMap instead works with single-cell targets.
 
 ![Fig 1. scPerturb-CMap pipeline](figs/fig1_system_diagram_r.png)
 
 *Figure 1. Single-cell targets align to curated L1000 signatures before the baseline and DualEncoder branches blend into a ranked compound readout.*
-
 
 ## Feature Highlights
 
@@ -57,12 +44,6 @@ Supported data contracts:
 - **Target engineering** – pseudobulk grouping (`--pseudobulk-key`), QC summaries (gene balance, overlap with LINCS), and JSON/CSV exports.
 - **Pair generation helpers** – utilities under `scperturb_cmap.data.pairs` to sample positives/negatives from LINCS metadata.
 - **Rich analytics** – Streamlit UI exposing target QC, MOA enrichment bars, and cell-line heatmaps.
-
----
-
-### How the model works
-
-I encode the target signature and each LINCS signature into a shared embedding space using a DualEncoder trained on known inversion pairs (contrastive/triplet losses). Similarity in this space estimates reversal strength. At inference, I blend the learned metric with the statistical baseline (configurable or auto-tuned) to yield robust, accurate rankings.
 
 ---
 
