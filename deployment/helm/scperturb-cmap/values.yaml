@@ -124,6 +124,7 @@ ui:
 worker:
   enabled: true
   replicaCount: 3
+  concurrency: 2
   
   image:
     target: worker
@@ -144,8 +145,8 @@ worker:
     targetMemoryUtilizationPercentage: 80
   
   env:
-    - name: CELERY_CONCURRENCY
-      value: "2"
+    - name: CELERY_DEFAULT_QUEUE
+      value: "scperturb-cmap"
 
 # Redis configuration
 redis:

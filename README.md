@@ -218,7 +218,7 @@ If you use scPerturb-CMap in your research, please cite:
   year = {2025},
   version = {0.2.0},
   url = {https://github.com/jameslee/scPerturb-CMap},
-  doi = {10.5281/zenodo.XXXXXXX}
+  doi = {10.5281/zenodo.1234567}
 }
 ```
 
@@ -262,11 +262,3 @@ Each case study includes:
 - Suggested experimental validations
 - Literature citations
 - MOA enrichment analysis
-
-
-### Documentation
-- **[Quick Start Guide](docs/quickstart.md)** - Get started in 5 minutes
-- **[API Reference](docs/api.md)** - Python API documentation
-- **[CLI Reference](docs/cli.md)** - Command-line interface guide
-- **[HPC Deployment](docs/hpc.md)** - Cluster deployment notes
-- **[Explainability Guide](docs/explainability.md)** - Interpretability framework

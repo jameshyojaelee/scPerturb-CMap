@@ -3,6 +3,7 @@ Metrics collection and monitoring utilities
 Integrates with Prometheus, CloudWatch, and Cloud Monitoring
 """
 import functools
+import os
 import time
 from typing import Any, Callable, Dict, Optional
 
@@ -102,11 +103,24 @@ class MetricsCollector:
         try:
             from google.cloud import monitoring_v3
             self.monitoring_client = monitoring_v3.MetricServiceClient()
-            self.project_name = self.monitoring_client.common_project_path(
-                project_id='your-project-id'  # TODO: Get from environment
+            project_id = (
+                os.environ.get('GOOGLE_CLOUD_PROJECT')
+                or os.environ.get('GCP_PROJECT')
+                or os.environ.get('GCP_PROJECT_ID')
             )
+            if not project_id:
+                print(
+                    "Warning: GOOGLE_CLOUD_PROJECT or GCP_PROJECT not set; "
+                    "Cloud Monitoring metrics disabled"
+                )
+                self.enabled = False
+                return
+            self.project_name = self.monitoring_client.common_project_path(project_id)
         except ImportError:
             print("Warning: google-cloud-monitoring not available, metrics disabled")
+            self.enabled = False
+        except Exception as exc:  # pragma: no cover - defensive path
+            print(f"Warning: Failed to initialise Cloud Monitoring: {exc}")
             self.enabled = False
     
     def record_http_request(

@@ -1,20 +1,31 @@
 """
-FastAPI-based REST API for scPerturb-CMap
-Production-ready API server with metrics, health checks, and async support
+FastAPI-based REST API for scPerturb-CMap.
+
+Exposes connectivity scoring endpoints with cached LINCS library loading
+and basic observability hooks for production deployments.
 """
 from contextlib import asynccontextmanager
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional
-
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-import pandas as pd
+import logging
+import os
 import time
 
+import pandas as pd
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
 from scperturb_cmap.api.score import rank_drugs
-from scperturb_cmap.io.schemas import TargetSignature, ScoreResult
+from scperturb_cmap.data.lincs_loader import load_lincs_long
+from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.utils.metrics import get_metrics_collector
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_LINCS_PATH = "/data/lincs/partitioned"
+DEFAULT_MODEL_PATH = "/app/workspace/artifacts/best.pt"
 
 
 # Pydantic models for API
@@ -43,6 +54,73 @@ class HealthResponse(BaseModel):
     uptime: float
 
 
+def _resolve_lincs_path() -> Path:
+    """Resolve the LINCS dataset path from environment variables."""
+    env_path = os.environ.get("SCPC_LINCS_PATH", DEFAULT_LINCS_PATH)
+    return Path(env_path).expanduser()
+
+
+def _resolve_model_path() -> Path:
+    """Resolve the DualEncoder model path from environment variables."""
+    env_path = os.environ.get("SCPC_MODEL_PATH", DEFAULT_MODEL_PATH)
+    return Path(env_path).expanduser()
+
+
+@lru_cache(maxsize=1)
+def _load_lincs_cached(path_str: str) -> pd.DataFrame:
+    """
+    Load the LINCS library and cache the in-memory DataFrame.
+
+    Args:
+        path_str: Absolute string path to file or directory.
+    """
+    path = Path(path_str)
+    if not path.exists():
+        raise FileNotFoundError(f"LINCS library not found at {path}")
+
+    if path.is_dir():
+        try:
+            import pyarrow.dataset as ds  # type: ignore
+        except ImportError as exc:  # pragma: no cover - depends on optional dep
+            raise RuntimeError(
+                "pyarrow is required to read partitioned LINCS datasets"
+            ) from exc
+        dataset = ds.dataset(str(path), format="parquet")
+        table = dataset.to_table()
+        return table.to_pandas()
+
+    # File-based dataset (Parquet/CSV/TSV) – rely on existing loader.
+    return load_lincs_long(str(path))
+
+
+def get_lincs_library() -> pd.DataFrame:
+    """Return the cached LINCS DataFrame, raising HTTP errors on failure."""
+    path = _resolve_lincs_path()
+    try:
+        return _load_lincs_cached(str(path.resolve()))
+    except FileNotFoundError as exc:
+        logger.error("LINCS library missing: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception("Failed to load LINCS library from %s", path)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load LINCS library: {exc}",
+        ) from exc
+
+
+def get_model_path(required: bool) -> Optional[str]:
+    """Return the model path if present; error if required but absent."""
+    model_path = _resolve_model_path()
+    if not required:
+        return str(model_path) if model_path.exists() else None
+    if not model_path.exists():
+        msg = f"Metric model not found at {model_path}"
+        logger.error(msg)
+        raise HTTPException(status_code=503, detail=msg)
+    return str(model_path)
+
+
 # Application lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,10 +129,14 @@ async def lifespan(app: FastAPI):
     print("Starting scPerturb-CMap API server...")
     app.state.start_time = time.time()
     app.state.metrics = get_metrics_collector()
-    
-    # Load shared resources (cache LINCS library if needed)
-    # TODO: Implement caching strategy
-    
+
+    # Warm the LINCS cache to catch issues early (best effort)
+    try:
+        get_lincs_library()
+    except HTTPException:
+        # Defer error handling to request time; log for visibility.
+        logger.warning("LINCS library warmup failed; will retry on demand.")
+
     yield
     
     # Shutdown
@@ -152,7 +234,7 @@ async def score_target(
     Returns ranked list of compounds with connectivity scores
     """
     start_time = time.time()
-    
+
     try:
         # Parse target signature
         target = TargetSignature(
@@ -160,18 +242,16 @@ async def score_target(
             weights=request.target['weights'],
             metadata=request.target.get('metadata', {})
         )
-        
-        # Load LINCS library (TODO: implement caching)
-        # For now, assuming library is loaded or passed in
-        # In production, use cloud_storage module to load from S3/GCS
-        library_path = "/data/lincs/partitioned"  # Configure via environment
-        
+
+        library_df = get_lincs_library()
+        model_path = get_model_path(required=request.method.lower() == "metric")
+
         # Perform scoring
         result = rank_drugs(
             target_signature=target,
-            library=library_path,  # This should be a DataFrame or path
+            library=library_df,
             method=request.method,
-            model_path="/app/workspace/artifacts/best.pt" if request.method == "metric" else None,
+            model_path=model_path,
             top_k=request.top_k,
             blend=request.blend,
             auto_blend=request.auto_blend

@@ -37,7 +37,9 @@ spec:
           - "scperturb_cmap.worker"
           - "worker"
           - "--loglevel=info"
-          - "--concurrency={{ .Values.worker.env | first | pluck "value" | first | default "2" }}"
+          {{- if .Values.worker.concurrency }}
+          - "--concurrency={{ .Values.worker.concurrency }}"
+          {{- end }}
         env:
         {{- range .Values.worker.env }}
         - name: {{ .name }}
