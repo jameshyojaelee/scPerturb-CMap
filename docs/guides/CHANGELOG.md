@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Consolidated generated artifacts under `workspace/` and updated tooling to use environment Python.
 - Bumped project version metadata to 0.2.0.
+- Documented that `make acceptance` remains a local-only smoke test.
 
 ### Fixed
 - Acceptance harness now respects the active Python interpreter instead of assuming `.venv` paths.

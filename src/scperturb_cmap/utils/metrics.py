@@ -19,16 +19,18 @@ class MetricsCollector:
     Unified metrics collector supporting multiple backends
     """
     
-    def __init__(self, backend: str = 'prometheus', port: int = 8000):
+    def __init__(self, backend: str = 'prometheus', port: int = 8000, namespace: str | None = None):
         """
         Initialize metrics collector
         
         Args:
             backend: 'prometheus', 'cloudwatch', 'cloud_monitoring', or 'none'
             port: Port for Prometheus HTTP server
+            namespace: Optional namespace for cloud metric backends
         """
         self.backend = backend
         self.enabled = backend != 'none'
+        self.namespace = namespace or 'scPerturb-CMap'
         
         if self.backend == 'prometheus' and PROMETHEUS_AVAILABLE:
             self._init_prometheus()
@@ -93,7 +95,6 @@ class MetricsCollector:
         try:
             import boto3
             self.cloudwatch = boto3.client('cloudwatch')
-            self.namespace = 'scPerturb-CMap'
         except ImportError:
             print("Warning: boto3 not available, CloudWatch metrics disabled")
             self.enabled = False
@@ -246,14 +247,27 @@ class MetricsCollector:
 _metrics_collector: Optional[MetricsCollector] = None
 
 
-def get_metrics_collector() -> MetricsCollector:
+def get_metrics_collector(
+    backend: Optional[str] = None,
+    port: Optional[int] = None,
+    namespace: Optional[str] = None,
+) -> MetricsCollector:
     """Get or create global metrics collector"""
     global _metrics_collector
     if _metrics_collector is None:
         import os
-        backend = os.environ.get('METRICS_BACKEND', 'prometheus')
-        port = int(os.environ.get('METRICS_PORT', '8000'))
-        _metrics_collector = MetricsCollector(backend=backend, port=port)
+        resolved_backend = backend or os.environ.get('SCPC_METRICS_BACKEND') or os.environ.get('METRICS_BACKEND', 'prometheus')
+        resolved_port = int(
+            port
+            or os.environ.get('SCPC_METRICS_PORT')
+            or os.environ.get('METRICS_PORT', '8000')
+        )
+        resolved_namespace = namespace or os.environ.get('SCPC_METRICS_NAMESPACE')
+        _metrics_collector = MetricsCollector(
+            backend=resolved_backend,
+            port=resolved_port,
+            namespace=resolved_namespace,
+        )
     return _metrics_collector
 
 

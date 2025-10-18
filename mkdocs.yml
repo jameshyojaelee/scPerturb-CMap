@@ -33,40 +33,36 @@ nav:
   - Home: index.md
   - Getting Started:
     - Quickstart: quickstart.md
-    - Installation: quickstart.md#installation
-    - First Analysis: quickstart.md#first-analysis
-  
+
   - User Guide:
     - CLI Reference: cli.md
     - API Reference: api.md
     - Explainability Framework: explainability.md
     - HPC Deployment: hpc.md
-  
+
   - Case Studies:
-    - Overview: ../case_studies/README.md
+    - Overview: cases/index.md
     - NSCLC CD8+ T Cell Exhaustion: cases/nsclc_cd8.md
     - EMT in Breast Cancer: cases/emt_breast.md
     - IFN-high Macrophages: cases/ifn_macrophage.md
-  
+
   - Deployment:
-    - Overview: deployment/CLOUD_DEPLOYMENT.md
-    - Docker: ../deployment/docker/README.md
-    - Kubernetes: deployment/CLOUD_DEPLOYMENT.md#kubernetes-helm
-    - AWS: deployment/CLOUD_DEPLOYMENT.md#aws-ecsfargate
-    - GCP: deployment/CLOUD_DEPLOYMENT.md#gcp-gke
-    - Serverless: deployment/CLOUD_DEPLOYMENT.md#aws-lambda-serverless
-  
+    - Overview: deployment/README.md
+    - Cloud Guide: deployment/CLOUD_DEPLOYMENT.md
+
   - Development:
-    - Contributing: contributing/CONTRIBUTING.md
-    - Development Setup: contributing/CONTRIBUTING.md#development-setup
-    - Testing: contributing/CONTRIBUTING.md#testing
-    - Code Style: contributing/CONTRIBUTING.md#code-style
-  
+    - Contributing Guide: contributing/CONTRIBUTING.md
+    - Contributor FAQ: contributing/README.md
+    - Explainability Dev Notes: contributing/EXPLAINABILITY_SUMMARY.md
+
   - Reference:
+    - Guides Overview: guides/README.md
     - Changelog: guides/CHANGELOG.md
     - Roadmap: guides/ROADMAP.md
     - Data Notes: guides/DATA_NOTES.md
-    - Repository Structure: ../STRUCTURE.md
+    - Explainability Features: guides/EXPLAINABILITY_FEATURES.md
+    - Architecture: architecture/README.md
+    - Repository Structure: reference/repository_structure.md
 
 plugins:
   - search

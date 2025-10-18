@@ -61,15 +61,37 @@ docker build -f Dockerfile.prod --target api-server -t scperturb-cmap:api .
 
 ## Environment Variables
 
-### Required
-- `SCPC_DATA_DIR` - Data directory path (default: `/data`)
-- `SCPC_LINCS` - LINCS library path (default: `/data/lincs/partitioned`)
+The API and worker containers read their configuration from environment variables. Defaults are
+optimised for local development; production deployments should override them explicitly.
 
-### Optional
-- `SCPC_MODEL` - Model checkpoint path
-- `SCPC_CACHE_DIR` - Cache directory
-- `REDIS_URL` - Redis connection URL (for workers)
-- `DATABASE_URL` - PostgreSQL connection URL
+### Core runtime
+- `SCPC_ENV` – Deployment environment (`production`, `staging`, or `development`; default: `production`)
+- `SCPC_LINCS_PATH` – Absolute path to the LINCS dataset (default: `/data/lincs/partitioned`)
+- `SCPC_MODEL_PATH` – Path to the metric model checkpoint (default: `/app/workspace/artifacts/best.pt`)
+- `SCPC_CACHE_TTL` – LINCS cache time-to-live in seconds (default: `3600`)
+- `SCPC_REQUEST_TIMEOUT` – Request timeout enforced by the API in seconds (default: `30`)
+- `SCPC_MAX_REQUEST_SIZE_MB` – Maximum accepted request payload size in MiB (default: `25`)
+
+### Networking & security
+- `SCPC_CORS_ORIGINS` – Comma-separated or JSON list of allowed CORS origins; falls back to `*` only when `SCPC_ENV=development`
+- `SCPC_REQUIRE_MODEL` – Set to `true` to make readiness checks fail when the model file is missing (default: `false`)
+
+### Metrics & observability
+- `SCPC_METRICS_BACKEND` – Metrics backend (`prometheus`, `cloudwatch`, `cloud_monitoring`, or `none`; default: `prometheus`)
+- `SCPC_METRICS_PORT` – Port for the Prometheus metrics HTTP exporter (default: `8000`)
+- `SCPC_METRICS_NAMESPACE` – Optional namespace for CloudWatch or Cloud Monitoring metrics
+
+### External services
+- `SCPC_REDIS_URL` or `REDIS_URL` – Redis connection string for caching (optional)
+- `SCPC_DATABASE_URL` or `DATABASE_URL` – PostgreSQL connection string for metadata (optional)
+- `SCPC_READINESS_CHECK_REDIS` / `SCPC_READINESS_CHECK_POSTGRES` – Enable/disable readiness probes for Redis/PostgreSQL (default: `true`)
+
+### Data directories
+- `SCPC_DATA_DIR` – Shared data directory path (default: `/data`)
+- `SCPC_CACHE_DIR` – Writeable cache directory (default: `/app/workspace/cache`)
+
+> **Security note:** API authentication, rate limiting, and key management are still handled by the
+> ingress or API gateway tiers. Ensure these are configured before exposing the service publicly.
 
 ## Mounting Data
 

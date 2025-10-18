@@ -75,7 +75,8 @@ fig = create_waterfall_plot(
 - **Bar length**: Magnitude of contribution
 - **Total shown**: Sum of contributions from displayed genes
 
-![Example Waterfall Plot](../figs/waterfall_example.png)
+> Tip: the helper writes a PNG to the `output_path` you provide, making it easy
+> to attach figures to lab notebooks or share them with collaborators.
 
 ---
 
@@ -495,9 +496,9 @@ If you use the explainability framework in publications, please cite:
 
 ## Additional Resources
 
-- [Explainability Demo](../examples/explainability_demo.py)
+- [Explainability Demo](https://github.com/jameslee/scPerturb-CMap/blob/main/examples/explainability_demo.py)
 - [API Documentation](api.md#explainability)
-- [Case Studies with Explanations](../case_studies/)
+- [Case Studies with Explanations](cases/index.md)
 - [SHAP Original Paper](https://arxiv.org/abs/1705.07874)
 
 ---

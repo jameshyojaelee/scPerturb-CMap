@@ -31,6 +31,23 @@ helm install scperturb-cmap ./deployment/helm/scperturb-cmap \
   --set image.tag=0.2.0
 ```
 
+#### Runtime Configuration
+- Helm values expose environment variables for the API (`SCPC_ENV`, `SCPC_LINCS_PATH`,
+  `SCPC_MODEL_PATH`, `SCPC_CACHE_TTL`, `SCPC_CORS_ORIGINS`, `SCPC_METRICS_BACKEND`,
+  `SCPC_METRICS_PORT`, `SCPC_REQUEST_TIMEOUT`, `SCPC_MAX_REQUEST_SIZE_MB`,
+  `SCPC_REQUIRE_MODEL`, `SCPC_READINESS_CHECK_REDIS`, `SCPC_READINESS_CHECK_POSTGRES`).
+- The FastAPI readiness endpoint `/ready` verifies the LINCS cache plus optional Redis/PostgreSQL/
+  model dependencies before advertising readiness. Toggle the checks individually if the backing
+  services are managed elsewhere.
+- CORS now honours the configured origin list and only falls back to `*` when `SCPC_ENV` is set to
+  `development`, reducing the default attack surface.
+- Payloads larger than the configured `SCPC_MAX_REQUEST_SIZE_MB` and requests exceeding
+  `SCPC_REQUEST_TIMEOUT` are rejected early, protecting worker pods.
+- Prometheus exporters respect the configured backend/port; switch `SCPC_METRICS_BACKEND` to
+  `cloudwatch` or `cloud_monitoring` when deploying to AWS or GCP monitoring stacks.
+- API authentication, WAF policies, and rate limiting remain upstream responsibilities (Ingress,
+  API Gateway, or service mesh). Document the security posture alongside any issued API keys.
+
 ### 3. AWS Deployment Templates
 Location: `deployment/aws/cloudformation/`
 
@@ -296,10 +313,10 @@ aws lambda create-function \
 
 ## 🔗 Additional Resources
 
-- [Deployment Guide](deployment/README.md) - Detailed deployment instructions
-- [Helm Chart Documentation](deployment/helm/scperturb-cmap/README.md)
-- [API Documentation](docs/api.md)
-- [Architecture Diagrams](docs/architecture/) (TODO: Create diagrams)
+- [Deployment Overview](README.md) - Detailed deployment instructions
+- Helm chart sources: `deployment/helm/scperturb-cmap/`
+- [API Documentation](../api.md)
+- [Architecture Overview](../architecture/README.md)
 
 ## 🎓 Training and Support
 

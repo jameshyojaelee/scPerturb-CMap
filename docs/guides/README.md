@@ -16,6 +16,6 @@ This directory contains detailed guides, changelogs, and supplementary documenta
 
 ## See Also
 
-- [Main Documentation](../) - Core API and CLI documentation
-- [Deployment Docs](../deployment/) - Cloud deployment guides
-- [Contributing](../contributing/) - How to contribute to the project
+- [Main Documentation](../index.md) - Core API and CLI documentation
+- [Deployment Docs](../deployment/README.md) - Cloud deployment guides
+- [Contributing](../contributing/CONTRIBUTING.md) - How to contribute to the project

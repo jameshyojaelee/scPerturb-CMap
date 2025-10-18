@@ -440,10 +440,10 @@ ci_upper = percentile(scores, 97.5)
 
 ## 📚 Documentation
 
-- **Full Guide**: [docs/explainability.md](docs/explainability.md)
-- **API Reference**: [docs/api.md](docs/api.md#explainability)
-- **Demo Script**: [examples/explainability_demo.py](examples/explainability_demo.py)
-- **Case Studies**: [case_studies/](case_studies/)
+- **Full Guide**: [Explainability Overview](../explainability.md)
+- **API Reference**: [API Reference](../api.md#explainability)
+- **Demo Script**: [examples/explainability_demo.py](https://github.com/jameslee/scPerturb-CMap/blob/main/examples/explainability_demo.py)
+- **Case Studies**: [Case Study Overview](../cases/index.md)
 
 ---
 
@@ -457,7 +457,7 @@ We welcome contributions to improve the explainability framework:
 - **Narrative templates**: Enhanced text generation
 - **Performance optimizations**: Faster bootstrap methods
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See the [Contributing Guide](../contributing/CONTRIBUTING.md) for guidelines.
 
 ---
 

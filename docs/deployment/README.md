@@ -4,7 +4,7 @@ This directory contains comprehensive deployment documentation for production en
 
 ## Contents
 
-- **[CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md)** - Complete cloud deployment guide covering AWS, GCP, and Kubernetes
+- **[Cloud Deployment Guide](CLOUD_DEPLOYMENT.md)** – AWS, GCP, and Kubernetes walkthrough
 
 ## Deployment Options
 
@@ -14,21 +14,21 @@ This directory contains comprehensive deployment documentation for production en
    - ECS/Fargate for containers
    - Lambda for serverless API
    - S3 for LINCS data storage
-   - CloudFormation templates: `../../deployment/aws/`
+   - CloudFormation templates live under `deployment/aws/`
 
 2. **Google Cloud Platform**
    - GKE for Kubernetes
    - Cloud Functions for serverless
    - GCS for data storage
-   - Deployment Manager templates: `../../deployment/gcp/`
+   - Deployment Manager templates live under `deployment/gcp/`
 
 3. **Kubernetes (Any Cloud)**
-   - Helm charts: `../../deployment/kubernetes/helm/`
+   - Helm charts live under `deployment/helm/scperturb-cmap/`
    - Auto-scaling and monitoring included
 
 ### Container Deployment
 
-- **Docker**: See `../../deployment/docker/`
+- **Docker**: see `deployment/docker/`
   - Production Dockerfile with optimizations
   - Docker Compose for local deployment
   - Multi-stage builds with caching
@@ -36,18 +36,19 @@ This directory contains comprehensive deployment documentation for production en
 ### CI/CD
 
 - **GitHub Actions**: `.github/workflows/`
-- **GitLab CI**: `../../deployment/ci/`
+- **GitLab CI**: `deployment/ci/`
 
 ## Quick Links
 
-- [Deployment README](../../deployment/README.md) - Main deployment directory
-- [Docker Files](../../deployment/docker/)
-- [Helm Charts](../../deployment/kubernetes/helm/)
-- [Monitoring](../../deployment/prometheus/)
+- Main repository paths:
+  - `deployment/` – deployment manifests and tooling
+  - `deployment/docker/` – container assets
+  - `deployment/helm/` – Kubernetes charts
+  - `deployment/prometheus/` – monitoring configuration
 
 ## Support
 
 For deployment issues:
-- Check [troubleshooting guide](CLOUD_DEPLOYMENT.md#troubleshooting)
+- Check the [troubleshooting notes](CLOUD_DEPLOYMENT.md)
 - Open a GitHub issue
 - Email: support@scperturb-cmap.org

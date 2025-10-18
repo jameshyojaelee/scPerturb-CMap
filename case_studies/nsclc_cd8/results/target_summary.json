@@ -1,0 +1,9 @@
+{
+  "n_genes": 946,
+  "n_positive": 454,
+  "n_negative": 492,
+  "weight_mean": -3.7555112883726226e-17,
+  "weight_std": 0.9999999999999999,
+  "overlap_genes": 946,
+  "overlap_fraction": 1.0
+}

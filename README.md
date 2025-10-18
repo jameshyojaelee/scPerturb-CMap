@@ -59,6 +59,9 @@ To hack on the project locally:
 git clone https://github.com/jameslee/scPerturb-CMap.git
 cd scPerturb-CMap
 make setup
+# OR create the Conda environment with dev extras
+conda env create -f environment.yml
+conda activate scperturb-cmap
 ```
 
 Generated artifacts default to the `workspace/` directory (checkpoints under `workspace/artifacts/`, logs under `workspace/logs/`, documentation builds under `workspace/site/`). Point environment variables (e.g., `SCPC_MODEL`) there when running from a fresh install.
@@ -104,6 +107,8 @@ make test
 4. **(Optional) Train the metric model** – Supply curated inversion pairs via `scperturb-cmap train` (Hydra config under `configs/train.yaml`) to refine the DualEncoder checkpoint written to `workspace/artifacts/`.
 5. **Explore interactively** – Launch `make ui` to open the Streamlit dashboard, re-use existing targets, and export ranked hypotheses with MOA enrichment plots for bench scientists.
 6. **Validate & automate** – Use `make acceptance` for smoke tests, `make lint`/`make test` in CI, and the HPC scripts under `scripts/slurm/` for batch jobs.
+
+> `make acceptance` is designed as a local smoke test and is not executed as part of the default CI workflows.
 
 
 **Recall@50 by cell line**

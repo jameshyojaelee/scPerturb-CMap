@@ -61,7 +61,7 @@ api:
   
   readinessProbe:
     httpGet:
-      path: /health
+      path: /ready
       port: 8000
     initialDelaySeconds: 15
     periodSeconds: 5
@@ -77,6 +77,30 @@ api:
       value: "/data"
     - name: SCPC_CACHE_DIR
       value: "/app/workspace/cache"
+    - name: SCPC_ENV
+      value: "production"
+    - name: SCPC_LINCS_PATH
+      value: "/data/lincs/partitioned"
+    - name: SCPC_MODEL_PATH
+      value: "/app/workspace/artifacts/best.pt"
+    - name: SCPC_CACHE_TTL
+      value: "3600"
+    - name: SCPC_CORS_ORIGINS
+      value: "https://scperturb-cmap.example.com"
+    - name: SCPC_METRICS_BACKEND
+      value: "prometheus"
+    - name: SCPC_METRICS_PORT
+      value: "9000"
+    - name: SCPC_REQUEST_TIMEOUT
+      value: "30"
+    - name: SCPC_MAX_REQUEST_SIZE_MB
+      value: "25"
+    - name: SCPC_REQUIRE_MODEL
+      value: "false"
+    - name: SCPC_READINESS_CHECK_REDIS
+      value: "true"
+    - name: SCPC_READINESS_CHECK_POSTGRES
+      value: "true"
 
 # UI (Streamlit) configuration
 ui:

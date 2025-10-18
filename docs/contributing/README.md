@@ -18,8 +18,8 @@ This directory contains all information needed to contribute to scPerturb-CMap.
 ## Development Resources
 
 - [API Documentation](../api.md)
-- [Testing Guide](../../tests/)
-- [Examples](../../examples/)
+- `tests/` (unit and integration suite)
+- `examples/` (demo assets and scripts)
 
 ## Questions?
 
