@@ -60,6 +60,14 @@ Launch the UI with `make ui` (or `scperturb-cmap ui`) and open
 The UI reads the LINCS path from `SCPC_LINCS`; set this environment variable
 before launching to point at a larger library.
 
+## Acceptance Checks
+
+Run `make acceptance` after setup to exercise the bundled demo workflow (baseline scoring plus the
+metric fine-tune). On the reference workstation it completes in ~30 seconds and writes temporary
+artifacts under `workspace/`. On clusters with environment modules, load `openssl/1.1` before
+invoking the target (e.g., `module unload OpenSSL/3 && module load openssl/1.1 && make acceptance`)
+so PyArrow and Streamlit have access to the expected OpenSSL runtime.
+
 ## Next Steps
 
 - Work through the case-study scripts under `case_studies/*/scripts/run_analysis.py`.

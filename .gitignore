@@ -25,6 +25,7 @@ workspace/site/
 workspace/artifacts/
 examples/out/
 data/
+**/.hydra/
 
 # Logs
 workspace/logs/

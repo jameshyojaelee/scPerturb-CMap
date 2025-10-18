@@ -68,6 +68,20 @@ Generated artifacts default to the `workspace/` directory (checkpoints under `wo
 
 ---
 
+## LINCS Data Licensing & Attribution
+
+The demo bundles include small LINCS L1000 excerpts to keep acceptance tests fast. Production use
+still relies on the official LINCS distribution hosted by the [Broad Institute Connectivity Map
+(CLUE) team](https://clue.io/connectopedia/data_download). The data are released under a Creative
+Commons CC BY 4.0 license; downstream analysis must (a) attribute the Broad Institute, the NIH
+LINCS program, and the original publications (e.g. Subramanian *et&nbsp;al.*, Cell 2017) and
+(b) preserve the original license statement when you redistribute derived subsets. scPerturb-CMap
+does not grant additional rights to the LINCS measurements—ensure collaborators download
+authenticated archives directly from CLUE when possible and avoid re-hosting raw Level 5 files in
+public buckets.
+
+---
+
 ## Quickstart
 
 ```bash
@@ -105,7 +119,7 @@ make test
 2. **Build a target signature** – Derive up/down weights from an AnnData object or curated gene lists using `scperturb-cmap make-target` (or the Streamlit UI). Inspect QC summaries before moving on.
 3. **Score compounds** – Run `scperturb-cmap score` with `--method baseline` for a fast cosine+GSEA ensemble or pass `--method metric --model-path workspace/artifacts/best.pt` to blend in the trained DualEncoder.
 4. **(Optional) Train the metric model** – Supply curated inversion pairs via `scperturb-cmap train` (Hydra config under `configs/train.yaml`) to refine the DualEncoder checkpoint written to `workspace/artifacts/`.
-5. **Explore interactively** – Launch `make ui` to open the Streamlit dashboard, re-use existing targets, and export ranked hypotheses with MOA enrichment plots for bench scientists.
+5. **Explore interactively** – Launch `make ui` to open the Streamlit dashboard, reuse existing targets, and export ranked hypotheses with MOA enrichment plots for bench scientists.
 6. **Validate & automate** – Use `make acceptance` for smoke tests, `make lint`/`make test` in CI, and the HPC scripts under `scripts/slurm/` for batch jobs.
 
 > `make acceptance` is designed as a local smoke test and is not executed as part of the default CI workflows.

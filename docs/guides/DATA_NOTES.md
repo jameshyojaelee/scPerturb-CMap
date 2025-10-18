@@ -27,3 +27,11 @@
 - Gene symbol harmonization strategy
 - Any filters applied to cell lines or doses
 - Known limitations or TODOs
+
+## Licensing & Redistribution
+- LINCS L1000 data are distributed by the Broad Institute Connectivity Map (CLUE) team under a
+  Creative Commons CC BY 4.0 license. Cite Subramanian *et&nbsp;al.* (Cell, 2017) and the CLUE
+  portal in manuscripts and presentations that make use of the dataset.
+- When sharing derived subsets (e.g., partitioned Parquet tables) include the original license text
+  and attribution, and direct downstream users to retrieve authoritative copies from
+  [https://clue.io/connectopedia/data_download](https://clue.io/connectopedia/data_download).
