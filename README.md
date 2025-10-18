@@ -214,7 +214,7 @@ If you use scPerturb-CMap in your research, please cite:
 
 ```bibtex
 @software{scperturb_cmap2025,
-  author = {Lee, James and contributors},
+  author = {Lee, James},
   title = {scPerturb-CMap: Single-Cell Connectivity Mapping for Drug Repurposing},
   year = {2025},
   version = {0.2.0},
