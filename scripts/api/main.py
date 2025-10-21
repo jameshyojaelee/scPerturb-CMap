@@ -8,27 +8,34 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import json
 import time
 from contextlib import asynccontextmanager
-from functools import lru_cache
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-import pandas as pd
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
+from celery.exceptions import TimeoutError as CeleryTimeoutError
+from celery.result import AsyncResult
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from scperturb_cmap.api.runtime import (
+    check_postgres_connection,
+    check_redis_connection,
+    get_lincs_library,
+    get_model_path,
+)
 from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.api.settings import ApiSettings, get_api_settings
-from scperturb_cmap.data.lincs_loader import load_lincs_long
 from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.utils.metrics import get_metrics_collector
+from scperturb_cmap.workers.tasks import score_target_task
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +46,22 @@ CONTENT_TOO_LARGE = (
     if hasattr(status, "HTTP_413_CONTENT_TOO_LARGE")
     else status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
 )
+
+CELERY_STATE_MAP = {
+    "PENDING": "pending",
+    "STARTED": "running",
+    "RETRY": "retrying",
+    "SUCCESS": "completed",
+    "FAILURE": "failed",
+    "REVOKED": "cancelled",
+}
+
+
+def _celery_state(state: Optional[str]) -> str:
+    """Normalise Celery task states to API-friendly labels."""
+    if not state:
+        return "pending"
+    return CELERY_STATE_MAP.get(state.upper(), state.lower())
 
 
 def _runtime_settings() -> ApiSettings:
@@ -96,6 +119,18 @@ class RequestTimeoutMiddleware(BaseHTTPMiddleware):
             ) from exc
 
 
+def _get_celery_app_or_503():
+    """Return the configured Celery app or raise a 503 if unavailable."""
+    celery_app = getattr(app.state, "celery", None)
+    queue_enabled = getattr(app.state, "queue_enabled", False)
+    if not celery_app or not queue_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Asynchronous scoring workers are not configured.",
+        )
+    return celery_app
+
+
 # Pydantic models for API
 class ScoringRequest(BaseModel):
     """Request model for scoring endpoint."""
@@ -125,112 +160,20 @@ class HealthResponse(BaseModel):
     uptime: float
 
 
-@lru_cache(maxsize=1)
-def _load_lincs_cached(path_str: str) -> Tuple[pd.DataFrame, float]:
-    """
-    Load the LINCS library and cache the in-memory DataFrame with timestamp.
+class JobSubmissionResponse(BaseModel):
+    """Response returned after enqueueing a scoring job."""
 
-    Args:
-        path_str: Absolute string path to file or directory.
-    """
-    path = Path(path_str)
-    if not path.exists():
-        raise FileNotFoundError(f"LINCS library not found at {path}")
-
-    if path.is_dir():
-        try:
-            import pyarrow.dataset as ds  # type: ignore
-        except ImportError as exc:  # pragma: no cover - depends on optional dep
-            raise RuntimeError(
-                "pyarrow is required to read partitioned LINCS datasets"
-            ) from exc
-        dataset = ds.dataset(str(path), format="parquet")
-        table = dataset.to_table()
-        frame = table.to_pandas()
-    else:
-        frame = load_lincs_long(str(path))
-
-    return frame, time.time()
+    job_id: str
+    status: str
 
 
-def get_lincs_library(config: ApiSettings, *, force_refresh: bool = False) -> pd.DataFrame:
-    """Return the cached LINCS DataFrame, enforcing TTL and surfacing HTTP errors."""
-    if force_refresh:
-        _load_lincs_cached.cache_clear()
+class JobStatusResponse(BaseModel):
+    """Status payload for a scoring job."""
 
-    path = config.lincs_path
-    try:
-        library_df, loaded_at = _load_lincs_cached(str(path.resolve()))
-    except FileNotFoundError as exc:
-        logger.error("LINCS library missing: %s", exc)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.exception("Failed to load LINCS library from %s", path)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to load LINCS library: {exc}",
-        ) from exc
-
-    ttl = config.cache_ttl_seconds
-    if ttl > 0 and (time.time() - loaded_at) > ttl:
-        logger.info("LINCS cache expired (TTL=%s seconds); refreshing.", ttl)
-        _load_lincs_cached.cache_clear()
-        library_df, _ = _load_lincs_cached(str(path.resolve()))
-
-    return library_df
-
-
-def get_model_path(config: ApiSettings, required: bool) -> Optional[str]:
-    """Return the model path if present; error if required but absent."""
-    model_path = config.model_path
-    if not required:
-        return str(model_path) if model_path.exists() else None
-    if not model_path.exists():
-        msg = f"Metric model not found at {model_path}"
-        logger.error(msg)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=msg)
-    return str(model_path)
-
-
-async def _check_redis_connection(url: str) -> None:
-    """Verify Redis connectivity for readiness checks."""
-    try:
-        import redis.asyncio as aioredis  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError("redis package not installed for readiness checks") from exc
-
-    client = aioredis.from_url(url)
-    try:
-        await client.ping()
-    finally:
-        await client.close()
-
-
-async def _check_postgres_connection(dsn: str) -> None:
-    """Verify PostgreSQL connectivity for readiness checks."""
-    try:
-        import asyncpg  # type: ignore
-    except ImportError:
-        try:
-            import psycopg  # type: ignore
-        except ImportError as exc:
-            raise RuntimeError(
-                "Neither asyncpg nor psycopg available for PostgreSQL readiness checks"
-            ) from exc
-
-        def _sync_probe() -> None:
-            with psycopg.connect(dsn) as conn:  # type: ignore[attr-defined]
-                with conn.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-
-        await asyncio.to_thread(_sync_probe)
-        return
-
-    conn = await asyncpg.connect(dsn)
-    try:
-        await conn.fetchval("SELECT 1")
-    finally:
-        await conn.close()
+    job_id: str
+    status: str
+    result: Optional[ScoringResponse] = None
+    detail: Optional[str] = None
 
 
 # Application lifespan
@@ -247,6 +190,21 @@ async def lifespan(app: FastAPI):
         port=runtime_settings.metrics_port,
         namespace=runtime_settings.metrics_namespace,
     )
+
+    celery_app = getattr(score_target_task, "app", None)
+    if celery_app:
+        app.state.celery = celery_app
+    else:
+        app.state.celery = None
+
+    broker_present = runtime_settings.redis_url or os.getenv("CELERY_BROKER_URL")
+    app.state.queue_enabled = bool(app.state.celery) and bool(broker_present)
+
+    if app.state.queue_enabled:
+        broker_url = getattr(app.state.celery.conf, "broker_url", "unknown")
+        logger.info("Celery queue initialised (broker=%s).", broker_url)
+    else:
+        logger.info("Celery queue disabled; asynchronous scoring endpoints will return 503.")
 
     # Warm the LINCS cache to catch issues early (best effort)
     try:
@@ -418,7 +376,7 @@ async def readiness_check():
     # Redis connectivity (optional)
     if runtime_settings.redis_url and runtime_settings.readiness_check_redis:
         try:
-            await _check_redis_connection(runtime_settings.redis_url)
+            await check_redis_connection(runtime_settings.redis_url)
             checks["redis"] = {"status": "ok"}
         except Exception as exc:  # pragma: no cover - external dependency
             detail = str(exc)
@@ -430,7 +388,7 @@ async def readiness_check():
     # PostgreSQL connectivity (optional)
     if runtime_settings.postgres_dsn and runtime_settings.readiness_check_postgres:
         try:
-            await _check_postgres_connection(runtime_settings.postgres_dsn)
+            await check_postgres_connection(runtime_settings.postgres_dsn)
             checks["postgres"] = {"status": "ok"}
         except Exception as exc:  # pragma: no cover - external dependency
             detail = str(exc)
@@ -458,6 +416,88 @@ async def metrics():
         "backend": runtime_settings.metrics_backend,
         "port": runtime_settings.metrics_port,
     }
+
+
+# Asynchronous scoring endpoints
+@app.post("/api/score/jobs", response_model=JobSubmissionResponse, tags=["Scoring"])
+async def enqueue_score_job(request: ScoringRequest):
+    """Enqueue a connectivity scoring job for background processing."""
+    _get_celery_app_or_503()  # Ensure queue is configured
+    payload = request.model_dump()
+    async_result = score_target_task.apply_async(kwargs={"payload": payload})
+    status_label = _celery_state(async_result.state)
+    return JobSubmissionResponse(job_id=async_result.id, status=status_label)
+
+
+@app.get("/api/score/jobs/{job_id}", response_model=JobStatusResponse, tags=["Scoring"])
+async def get_score_job_status(
+    job_id: str,
+    wait: Optional[float] = Query(
+        None,
+        ge=0.0,
+        le=30.0,
+        description="Optional seconds to wait for job completion before returning.",
+    ),
+):
+    """Return the status (and result when available) for a scoring job."""
+    celery_app = _get_celery_app_or_503()
+    async_result = AsyncResult(job_id, app=celery_app)
+
+    if wait and wait > 0:
+        try:
+            await asyncio.to_thread(async_result.get, timeout=wait)
+        except CeleryTimeoutError:
+            pass
+
+    state = _celery_state(async_result.state)
+
+    if async_result.successful():
+        result_payload = async_result.result
+        response = JobStatusResponse(
+            job_id=job_id,
+            status=state,
+            result=ScoringResponse(**result_payload),
+        )
+        return response
+
+    if async_result.failed():
+        detail = str(async_result.result)
+        response = JobStatusResponse(job_id=job_id, status=state, detail=detail)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=response.model_dump(),
+        )
+
+    response = JobStatusResponse(job_id=job_id, status=state)
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content=response.model_dump(),
+    )
+
+
+@app.get("/api/score/jobs/{job_id}/stream", tags=["Scoring"])
+async def stream_score_job(job_id: str, interval: float = Query(1.0, ge=0.1, le=5.0)):
+    """Stream job status updates until the scoring result is available."""
+    celery_app = _get_celery_app_or_503()
+
+    async def event_stream():
+        while True:
+            async_result = AsyncResult(job_id, app=celery_app)
+            state = _celery_state(async_result.state)
+            message: Dict[str, Any] = {"job_id": job_id, "status": state}
+            if async_result.successful():
+                message["result"] = async_result.result
+                yield json.dumps(message) + "\n"
+                break
+            if async_result.failed():
+                message["detail"] = str(async_result.result)
+                yield json.dumps(message) + "\n"
+                break
+
+            yield json.dumps(message) + "\n"
+            await asyncio.sleep(interval)
+
+    return StreamingResponse(event_stream(), media_type="application/jsonl")
 
 
 # Scoring endpoint

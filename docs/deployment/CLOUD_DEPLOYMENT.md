@@ -48,6 +48,21 @@ helm install scperturb-cmap ./deployment/helm/scperturb-cmap \
 - API authentication, WAF policies, and rate limiting remain upstream responsibilities (Ingress,
   API Gateway, or service mesh). Document the security posture alongside any issued API keys.
 
+#### Asynchronous Job Queue
+- Background scoring now runs through Celery workers backed by Redis. Set `SCPC_REDIS_URL` (or
+  `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND`) for the API and worker pods. The API advertises
+  `/api/score/jobs` to enqueue work, `/api/score/jobs/{id}` for polling, and
+  `/api/score/jobs/{id}/stream` for newline-delimited status updates.
+- Scale workers independently from the API. In Docker Compose, the `worker` service is already
+  wired to the same image; in Kubernetes, replicate the `worker` Deployment or attach an HPA based
+  on queue depth metrics.
+- Local development can rely on the bundled compose stack:
+  ```bash
+  docker compose -f deployment/docker/docker-compose.prod.yml up redis worker api
+  ```
+  Alternatively, unit tests and smoke runs can switch to synchronous execution by exporting
+  `CELERY_TASK_ALWAYS_EAGER=1`, which keeps compatibility with headless CI runs.
+
 ### 3. AWS Deployment Templates
 Location: `deployment/aws/cloudformation/`
 

@@ -155,7 +155,7 @@ USER scperturb
 
 # Override for worker processes
 ENTRYPOINT ["celery"]
-CMD ["-A", "scperturb_cmap.worker", "worker", "--loglevel=info", "--concurrency=2"]
+CMD ["-A", "scperturb_cmap.workers.tasks", "worker", "--loglevel=info", "--concurrency=2"]
 
 # ============================================================================
 # Metadata labels

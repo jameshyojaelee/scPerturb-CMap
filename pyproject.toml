@@ -42,6 +42,8 @@ dependencies = [
   "hydra-core",
   "pyarrow",
   "typer",
+  "celery[redis]",
+  "redis",
 ]
 
 [project.optional-dependencies]
