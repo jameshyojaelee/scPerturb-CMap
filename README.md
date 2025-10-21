@@ -1,5 +1,7 @@
 # scPerturb-CMap
 
+[![PyPI version](https://img.shields.io/pypi/v/scperturb-cmap.svg)](https://pypi.org/project/scperturb-cmap/)
+
 The Broad Connectivity Map (LINCS L1000) captures millions of empirically measured drug responses. scPerturb-CMap is the bridge that lets single-cell researchers mine that atlas without rebuilding perturbation screens from scratch. Starting with a troublesome or rare cell population (e.g., EMT-like tumor cells, IFN-high macrophages, exhausted T cells), you derive a gene signature and immediately query the L1000 treasury for compounds proven to push cells in the opposite direction. 
 
 scPerturb-CMap allows users to use L1000 CMap data to rank compounds that are most likely to reverse pathological cell states within their own single-cell RNA-seq datasets, enabling rapid, data-driven drug repurposing prediction for bench validation
@@ -37,6 +39,8 @@ Traditional connectivity mapping averages bulk transcriptomes and may miss rare 
 ```bash
 pip install scperturb-cmap
 ```
+
+The project is published on [PyPI](https://pypi.org/project/scperturb-cmap/) with wheels for quick installation across common environments; check the release history there for the latest version notes.
 
 To hack on the project locally:
 
