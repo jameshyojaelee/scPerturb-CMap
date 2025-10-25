@@ -101,6 +101,11 @@ make test
 
 > **Python**: 3.10+ is required. All commands above assume GNU Make and a POSIX shell.
 
+**Required files** when working with your own data:
+- A target signature derived from single-cell RNA-seq (scRNA-seq) expression data. The CLI prefers an AnnData `.h5ad` with counts + cell annotations (clusters, conditions) so `scperturb-cmap make-target` can compute up/down weights, but you can also provide explicit gene lists or JSON signatures exported from that command or the UI.
+- A LINCS L1000 reference library in long-form Parquet/CSV. Download the official CLUE files (`GSE92742_*_Level5_COMPZ.MODZ.gctx`, `gene_info.txt`, `sig_info.txt.gz`, `repurposing_drugs.tsv`, etc.) and convert them via `scperturb-cmap prepare-lincs` (step-by-step walkthrough in `docs/cli.md#prepare-lincs`).
+- Optional but recommended: landmark gene lists, metadata annotations, and a writable output directory for scoring/training artifacts.
+
 1. **Prepare the library** – Convert or download LINCS L1000 signatures into a long-form Parquet/CSV table (`scperturb-cmap prepare-lincs`) and keep them under `data/lincs/` or another Arrow-friendly location.
 2. **Build a target signature** – Derive up/down weights from an AnnData object or curated gene lists using `scperturb-cmap make-target` (or the Streamlit UI). Inspect QC summaries before moving on.
 3. **Score compounds** – Run `scperturb-cmap score` with `--method baseline` for a fast cosine+GSEA ensemble or pass `--method metric --model-path workspace/artifacts/best.pt` to blend in the trained DualEncoder.
