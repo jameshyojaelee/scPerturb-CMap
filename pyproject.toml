@@ -53,6 +53,9 @@ dev = [
   "pytest-cov",
   "build",
   "twine",
+  "mkdocs",
+  "mkdocs-material",
+  "mike",
 ]
 
 [project.scripts]

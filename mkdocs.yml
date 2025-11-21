@@ -1,6 +1,6 @@
 site_name: scPerturb-CMap
 site_description: Single-cell connectivity mapping toolkit for drug repurposing
-site_url: https://scperturb-cmap.readthedocs.io
+site_url: https://jameslee.github.io/scPerturb-CMap
 site_dir: workspace/site
 
 theme:
@@ -33,6 +33,10 @@ nav:
   - Home: index.md
   - Getting Started:
     - Quickstart: quickstart.md
+
+  - Tutorials:
+    - Overview: tutorials/index.md
+    - CLI + Streamlit Walkthrough: tutorials/cli_and_ui_walkthrough.md
 
   - User Guide:
     - CLI Reference: cli.md
@@ -88,3 +92,4 @@ extra:
       link: https://github.com/jameslee/scPerturb-CMap
   version:
     provider: mike
+    default: latest
