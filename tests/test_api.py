@@ -14,6 +14,46 @@ from scperturb_cmap.api.settings import get_api_settings, reset_api_settings_cac
 from scperturb_cmap.io.schemas import ScoreResult
 
 
+class _StubGauge:
+    def __init__(self):
+        self.count = 0
+
+    def inc(self):
+        self.count += 1
+
+    def dec(self):
+        self.count -= 1
+
+
+class _StubMetrics:
+    def __init__(self):
+        self.active_requests = _StubGauge()
+        self.http_principals = []
+        self.scoring_principals = []
+
+    def record_http_request(
+        self,
+        *,
+        method: str,
+        path: str,
+        status: int,
+        duration: float,
+        principal: str = "anonymous",
+    ):
+        self.http_principals.append(principal)
+
+    def record_scoring_operation(
+        self,
+        *,
+        method: str,
+        cell_line: Optional[str],
+        duration: float,
+        success: bool,
+        principal: str = "anonymous",
+    ):
+        self.scoring_principals.append(principal)
+
+
 def _write_lincs_fixture(path: Path) -> Path:
     df = pd.DataFrame(
         {
@@ -65,6 +105,22 @@ def _load_api_module(
 
     api_module = importlib.reload(api_main)
     return api_module
+
+
+def _stub_score_result() -> ScoreResult:
+    ranking_df = pd.DataFrame(
+        [
+            {
+                "signature_id": "sig1",
+                "compound": "cmpd1",
+                "cell_line": "A375",
+                "score": -1.23,
+                "moa": "kinase",
+                "target": "MAPK",
+            }
+        ]
+    )
+    return ScoreResult(method="baseline", ranking=ranking_df, metadata={"foo": "bar"})
 
 
 def test_api_settings_from_environment(monkeypatch: pytest.MonkeyPatch):
@@ -259,3 +315,82 @@ def test_enqueue_job_returns_503_when_queue_disabled(
 
     assert response.status_code == 503
     assert response.json()["error"]["type"] == "http_error"
+
+
+def test_score_requires_api_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    overrides = {
+        "SCPC_API_KEYS": '{"tester":"secret"}',
+        "SCPC_RATE_LIMIT_PER_MINUTE": "0",
+    }
+    api_module = _load_api_module(monkeypatch, tmp_path, overrides=overrides)
+    stub_result = _stub_score_result()
+    monkeypatch.setattr(api_module, "rank_drugs", lambda **_: stub_result)
+
+    payload = {
+        "target": {"genes": ["CDK1"], "weights": [1.0], "metadata": {}},
+        "method": "baseline",
+        "top_k": 1,
+    }
+
+    with TestClient(api_module.app) as client:
+        missing = client.post("/api/score", json=payload)
+        assert missing.status_code == 401
+
+        bad_key = client.post("/api/score", json=payload, headers={"X-API-Key": "wrong"})
+        assert bad_key.status_code == 401
+
+        ok = client.post("/api/score", json=payload, headers={"X-API-Key": "secret"})
+        assert ok.status_code == 200
+
+
+def test_rate_limit_blocks_after_threshold(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    overrides = {
+        "SCPC_API_KEYS": '{"tester":"secret"}',
+        "SCPC_RATE_LIMIT_PER_MINUTE": "1",
+        "SCPC_RATE_LIMIT_WINDOW_SECONDS": "60",
+    }
+    api_module = _load_api_module(monkeypatch, tmp_path, overrides=overrides)
+    stub_result = _stub_score_result()
+    monkeypatch.setattr(api_module, "rank_drugs", lambda **_: stub_result)
+
+    payload = {
+        "target": {"genes": ["CDK1"], "weights": [1.0], "metadata": {}},
+        "method": "baseline",
+        "top_k": 1,
+    }
+
+    with TestClient(api_module.app) as client:
+        first = client.post("/api/score", json=payload, headers={"X-API-Key": "secret"})
+        assert first.status_code == 200
+
+        second = client.post("/api/score", json=payload, headers={"X-API-Key": "secret"})
+        assert second.status_code == 429
+        assert "Rate limit exceeded" in second.json()["error"]["message"]
+        assert "Retry-After" in second.headers
+
+
+def test_metrics_capture_principal_without_exposing_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    overrides = {
+        "SCPC_API_KEYS": '{"tester":"secret"}',
+        "SCPC_METRICS_BACKEND": "none",
+    }
+    api_module = _load_api_module(monkeypatch, tmp_path, overrides=overrides)
+    stub_result = _stub_score_result()
+    monkeypatch.setattr(api_module, "rank_drugs", lambda **_: stub_result)
+    api_module.app.state.metrics = _StubMetrics()
+
+    payload = {
+        "target": {"genes": ["CDK1"], "weights": [1.0], "metadata": {}},
+        "method": "baseline",
+        "top_k": 1,
+    }
+
+    with TestClient(api_module.app) as client:
+        response = client.post("/api/score", json=payload, headers={"X-API-Key": "secret"})
+
+    assert response.status_code == 200
+    metrics = api_module.app.state.metrics
+    assert metrics.http_principals[-1] == "tester"
+    assert metrics.scoring_principals[-1] == "tester"

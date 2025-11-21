@@ -5,7 +5,7 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -63,6 +63,45 @@ def _parse_origins(raw_value: Optional[str]) -> List[str]:
     return [origin.strip() for origin in raw_value.split(",") if origin.strip()]
 
 
+def _parse_api_keys(raw_value: Optional[str], single_value: Optional[str]) -> Dict[str, str]:
+    """
+    Parse API key configuration from environment.
+
+    Supports JSON objects (label->key), JSON arrays, or comma-separated label:key pairs.
+    """
+    if raw_value:
+        try:
+            parsed = json.loads(raw_value)
+            if isinstance(parsed, dict):
+                return {str(label): str(key) for label, key in parsed.items() if str(key).strip()}
+            if isinstance(parsed, list):
+                return {
+                    f"key{i+1}": str(key)
+                    for i, key in enumerate(parsed)
+                    if str(key).strip()
+                }
+        except json.JSONDecodeError:
+            pass
+
+        pairs = [item.strip() for item in raw_value.split(",") if item.strip()]
+        parsed_pairs: Dict[str, str] = {}
+        for item in pairs:
+            if ":" in item:
+                label, key = item.split(":", 1)
+            else:
+                label = f"key{len(parsed_pairs) + 1}"
+                key = item
+            if key.strip():
+                parsed_pairs[label.strip() or f"key{len(parsed_pairs) + 1}"] = key.strip()
+        if parsed_pairs:
+            return parsed_pairs
+
+    if single_value and single_value.strip():
+        return {"default": single_value.strip()}
+
+    return {}
+
+
 class ApiSettings(BaseModel):
     """Configuration for the public FastAPI service."""
 
@@ -83,6 +122,11 @@ class ApiSettings(BaseModel):
     readiness_require_model: bool = Field(default=False)
     readiness_check_redis: bool = Field(default=True)
     readiness_check_postgres: bool = Field(default=True)
+    api_keys: Dict[str, str] = Field(default_factory=dict)
+    api_key_header: str = Field(default="X-API-Key")
+    rate_limit_per_minute: int = Field(default=0, ge=0)
+    rate_limit_window_seconds: int = Field(default=60, ge=1)
+    json_logs: bool = Field(default=True)
 
     @property
     def is_development(self) -> bool:
@@ -128,6 +172,14 @@ class ApiSettings(BaseModel):
         readiness_require_model = _parse_bool(env.get("SCPC_REQUIRE_MODEL"), False)
         readiness_check_redis = _parse_bool(env.get("SCPC_READINESS_CHECK_REDIS"), True)
         readiness_check_postgres = _parse_bool(env.get("SCPC_READINESS_CHECK_POSTGRES"), True)
+        api_keys = _parse_api_keys(
+            env.get("SCPC_API_KEYS") or env.get("API_KEYS"),
+            env.get("SCPC_API_KEY") or env.get("API_KEY"),
+        )
+        api_key_header = env.get("SCPC_API_KEY_HEADER") or "X-API-Key"
+        rate_limit_per_minute = _parse_int(env.get("SCPC_RATE_LIMIT_PER_MINUTE"), 0)
+        rate_limit_window_seconds = _parse_int(env.get("SCPC_RATE_LIMIT_WINDOW_SECONDS"), 60)
+        json_logs = _parse_bool(env.get("SCPC_JSON_LOGS"), True)
 
         try:
             return cls.model_validate(
@@ -147,6 +199,11 @@ class ApiSettings(BaseModel):
                     "readiness_require_model": readiness_require_model,
                     "readiness_check_redis": readiness_check_redis,
                     "readiness_check_postgres": readiness_check_postgres,
+                    "api_keys": api_keys,
+                    "api_key_header": api_key_header,
+                    "rate_limit_per_minute": rate_limit_per_minute,
+                    "rate_limit_window_seconds": rate_limit_window_seconds,
+                    "json_logs": json_logs,
                 }
             )
         except ValidationError as exc:  # pragma: no cover - defensive logging

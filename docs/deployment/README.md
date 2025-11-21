@@ -38,6 +38,14 @@ This directory contains comprehensive deployment documentation for production en
 - **GitHub Actions**: `.github/workflows/`
 - **GitLab CI**: `deployment/ci/`
 
+## API hardening and observability
+
+- Copy `.env.example` to `.env` (or your platform secret manager) and set `SCPC_API_KEYS` as JSON label:key pairs along with `SCPC_API_KEY_HEADER` (default `X-API-Key`). Requests without a valid key receive HTTP 401.
+- Per-principal throttling is controlled by `SCPC_RATE_LIMIT_PER_MINUTE` and `SCPC_RATE_LIMIT_WINDOW_SECONDS`; outages return HTTP 429 with a `Retry-After` hint.
+- Structured JSON logs are emitted when `SCPC_JSON_LOGS=true`, capturing method, path, status, duration, client, and a sanitized principal label (never the secret key).
+- Metrics now include the principal label as a low-cardinality dimension on HTTP/scoring counters to align dashboards with authentication context.
+- Keep Redis/Postgres readiness checks optional by toggling `SCPC_READINESS_CHECK_REDIS` / `SCPC_READINESS_CHECK_POSTGRES` when those services are absent from your deployment tier.
+
 ## Quick Links
 
 - Main repository paths:

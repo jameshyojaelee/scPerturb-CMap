@@ -62,6 +62,8 @@ helm install scperturb-cmap ./deployment/helm/scperturb-cmap \
   ```
   Alternatively, unit tests and smoke runs can switch to synchronous execution by exporting
   `CELERY_TASK_ALWAYS_EAGER=1`, which keeps compatibility with headless CI runs.
+- Use `.env.example` as a starting point for API keys, rate limits, and Redis credentials; Compose
+  is wired to read it automatically for the API and worker services.
 
 ### 3. AWS Deployment Templates
 Location: `deployment/aws/cloudformation/`

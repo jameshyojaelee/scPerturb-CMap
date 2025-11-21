@@ -10,13 +10,15 @@ import asyncio
 import logging
 import os
 import json
+import secrets
 import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from celery.result import AsyncResult
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -67,6 +69,108 @@ def _celery_state(state: Optional[str]) -> str:
 def _runtime_settings() -> ApiSettings:
     """Return the cached API settings (used before app.state is available)."""
     return settings
+
+
+class RateLimiter:
+    """In-memory, per-principal rate limiter."""
+
+    def __init__(self, limit: int, window_seconds: int) -> None:
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self._buckets: Dict[str, Deque[float]] = defaultdict(deque)
+        self._lock = asyncio.Lock()
+
+    async def allow(self, principal: str) -> Tuple[bool, float]:
+        """
+        Determine whether the principal is allowed to proceed.
+
+        Returns:
+            allowed: bool indicating if the request should be served
+            retry_after: suggested retry delay (seconds) when blocked
+        """
+        if self.limit <= 0:
+            return True, 0.0
+
+        now = time.time()
+        cutoff = now - self.window_seconds
+
+        async with self._lock:
+            bucket = self._buckets[principal]
+            while bucket and bucket[0] < cutoff:
+                bucket.popleft()
+
+            if len(bucket) >= self.limit:
+                retry_after = max(0.0, self.window_seconds - (now - bucket[0]))
+                return False, retry_after
+
+            bucket.append(now)
+            return True, 0.0
+
+
+def _extract_api_key(request: Request, header_name: str) -> Optional[str]:
+    """Extract an API key from headers or query params without logging secrets."""
+    header_value = request.headers.get(header_name)
+    if header_value:
+        return header_value.strip()
+
+    auth_header = request.headers.get("Authorization", "").strip()
+    if auth_header.lower().startswith("api-key "):
+        return auth_header.split(None, 1)[1].strip()
+    if auth_header.lower().startswith("bearer "):
+        return auth_header.split(None, 1)[1].strip()
+
+    query_key = request.query_params.get("api_key")
+    if query_key:
+        return query_key.strip()
+
+    return None
+
+
+async def require_api_key(request: Request) -> str:
+    """
+    Validate API key (when configured) and enforce per-principal rate limits.
+
+    Returns the resolved principal label for metrics/logging.
+    """
+    runtime_settings = getattr(request.app.state, "settings", settings)
+    api_keys = runtime_settings.api_keys
+    presented_key = _extract_api_key(request, runtime_settings.api_key_header)
+
+    principal = "anonymous"
+    if api_keys:
+        if not presented_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="API key required.",
+            )
+
+        matched_label = None
+        for label, key in api_keys.items():
+            if key and secrets.compare_digest(key, presented_key):
+                matched_label = label or "unknown"
+                break
+
+        if not matched_label:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key.",
+            )
+        principal = matched_label
+    elif presented_key:
+        principal = "provided"
+
+    limiter: Optional[RateLimiter] = getattr(request.app.state, "rate_limiter", None)
+    if limiter:
+        allowed, retry_after = await limiter.allow(principal)
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Rate limit exceeded for principal '{principal}'.",
+                headers={"Retry-After": str(int(retry_after) or 1)},
+            )
+
+    request.state.principal = principal
+    return principal
 
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
@@ -190,6 +294,13 @@ async def lifespan(app: FastAPI):
         port=runtime_settings.metrics_port,
         namespace=runtime_settings.metrics_namespace,
     )
+    if runtime_settings.rate_limit_per_minute > 0:
+        app.state.rate_limiter = RateLimiter(
+            limit=runtime_settings.rate_limit_per_minute,
+            window_seconds=runtime_settings.rate_limit_window_seconds,
+        )
+    else:
+        app.state.rate_limiter = None
 
     celery_app = getattr(score_target_task, "app", None)
     if celery_app:
@@ -257,6 +368,7 @@ app.add_middleware(BodySizeLimitMiddleware, max_body_size=settings.max_request_b
 async def track_requests(request: Request, call_next):
     """Track request metrics."""
     start_time = time.time()
+    runtime_settings = getattr(app.state, "settings", settings)
     metrics = getattr(app.state, "metrics", None)
 
     if metrics and hasattr(metrics, "active_requests"):
@@ -274,6 +386,7 @@ async def track_requests(request: Request, call_next):
         raise
     finally:
         duration = time.time() - start_time
+        principal = getattr(request.state, "principal", "anonymous")
         if metrics and hasattr(metrics, "active_requests"):
             metrics.active_requests.dec()
         if metrics:
@@ -282,6 +395,28 @@ async def track_requests(request: Request, call_next):
                 path=request.url.path,
                 status=status_code,
                 duration=duration,
+                principal=principal,
+            )
+        log_payload = {
+            "event": "http_request",
+            "method": request.method,
+            "path": request.url.path,
+            "status": status_code,
+            "duration_ms": int(duration * 1000),
+            "principal": principal,
+            "client": request.client.host if request.client else None,
+        }
+        if runtime_settings.json_logs:
+            logger.info(json.dumps(log_payload))
+        else:
+            logger.info(
+                "HTTP %s %s status=%s duration_ms=%s principal=%s client=%s",
+                request.method,
+                request.url.path,
+                status_code,
+                int(duration * 1000),
+                principal,
+                log_payload["client"],
             )
         if response is not None:
             response.headers["X-Process-Time"] = f"{duration:.6f}"
@@ -305,6 +440,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Return consistent HTTP error payloads."""
+    headers = getattr(exc, "headers", None)
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -314,6 +450,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
                 "status": exc.status_code,
             }
         },
+        headers=headers,
     )
 
 
@@ -420,7 +557,10 @@ async def metrics():
 
 # Asynchronous scoring endpoints
 @app.post("/api/score/jobs", response_model=JobSubmissionResponse, tags=["Scoring"])
-async def enqueue_score_job(request: ScoringRequest):
+async def enqueue_score_job(
+    request: ScoringRequest,
+    _principal: str = Depends(require_api_key),
+):
     """Enqueue a connectivity scoring job for background processing."""
     _get_celery_app_or_503()  # Ensure queue is configured
     payload = request.model_dump()
@@ -438,6 +578,7 @@ async def get_score_job_status(
         le=30.0,
         description="Optional seconds to wait for job completion before returning.",
     ),
+    _principal: str = Depends(require_api_key),
 ):
     """Return the status (and result when available) for a scoring job."""
     celery_app = _get_celery_app_or_503()
@@ -476,7 +617,11 @@ async def get_score_job_status(
 
 
 @app.get("/api/score/jobs/{job_id}/stream", tags=["Scoring"])
-async def stream_score_job(job_id: str, interval: float = Query(1.0, ge=0.1, le=5.0)):
+async def stream_score_job(
+    job_id: str,
+    interval: float = Query(1.0, ge=0.1, le=5.0),
+    _principal: str = Depends(require_api_key),
+):
     """Stream job status updates until the scoring result is available."""
     celery_app = _get_celery_app_or_503()
 
@@ -503,8 +648,10 @@ async def stream_score_job(job_id: str, interval: float = Query(1.0, ge=0.1, le=
 # Scoring endpoint
 @app.post("/api/score", response_model=ScoringResponse, tags=["Scoring"])
 async def score_target(
-    request: ScoringRequest,
+    payload: ScoringRequest,
     background_tasks: BackgroundTasks,
+    _request: Request,
+    principal: str = Depends(require_api_key),
 ):
     """
     Score a target signature against the LINCS library.
@@ -517,7 +664,7 @@ async def score_target(
 
     try:
         # Parse target signature
-        target_info = request.target
+        target_info = payload.target
         if not isinstance(target_info, dict):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -539,18 +686,18 @@ async def score_target(
         library_df = get_lincs_library(runtime_settings)
         model_path = get_model_path(
             runtime_settings,
-            required=request.method.lower() == "metric",
+            required=payload.method.lower() == "metric",
         )
 
         # Perform scoring
         result = rank_drugs(
             target_signature=target,
             library=library_df,
-            method=request.method,
+            method=payload.method,
             model_path=model_path,
-            top_k=request.top_k,
-            blend=request.blend,
-            auto_blend=request.auto_blend,
+            top_k=payload.top_k,
+            blend=payload.blend,
+            auto_blend=payload.auto_blend,
         )
 
         # Convert to response format
@@ -560,16 +707,17 @@ async def score_target(
         if metrics:
             background_tasks.add_task(
                 metrics.record_scoring_operation,
-                method=request.method,
-                cell_line=request.cell_line,
+                method=payload.method,
+                cell_line=payload.cell_line,
                 duration=execution_time,
                 success=True,
+                principal=principal,
             )
 
         return ScoringResponse(
             method=result.method,
             ranking=ranking_json,
-            metadata={**result.metadata, "cell_line": request.cell_line},
+            metadata={**result.metadata, "cell_line": payload.cell_line},
             execution_time=execution_time,
         )
 
@@ -577,10 +725,11 @@ async def score_target(
         if metrics:
             background_tasks.add_task(
                 metrics.record_scoring_operation,
-                method=request.method,
-                cell_line=request.cell_line,
+                method=payload.method,
+                cell_line=payload.cell_line,
                 duration=time.time() - start_time,
                 success=False,
+                principal=principal,
             )
         raise
     except Exception as exc:  # pragma: no cover - defensive path
@@ -588,10 +737,11 @@ async def score_target(
         if metrics:
             background_tasks.add_task(
                 metrics.record_scoring_operation,
-                method=request.method,
-                cell_line=request.cell_line,
+                method=payload.method,
+                cell_line=payload.cell_line,
                 duration=time.time() - start_time,
                 success=False,
+                principal=principal,
             )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

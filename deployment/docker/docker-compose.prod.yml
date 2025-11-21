@@ -42,6 +42,8 @@ services:
       context: .
       dockerfile: Dockerfile.prod
       target: api-server
+    env_file:
+      - ../../.env.example
     ports:
       - "8000:8000"
     environment:
@@ -119,6 +121,8 @@ services:
       context: .
       dockerfile: Dockerfile.prod
       target: worker
+    env_file:
+      - ../../.env.example
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/1

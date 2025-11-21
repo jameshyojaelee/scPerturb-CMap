@@ -45,22 +45,22 @@ class MetricsCollector:
         self.http_requests_total = Counter(
             'http_requests_total',
             'Total HTTP requests',
-            ['method', 'path', 'status']
+            ['method', 'path', 'status', 'principal']
         )
         self.http_request_duration_seconds = Histogram(
             'http_request_duration_seconds',
             'HTTP request duration in seconds',
-            ['method', 'path']
+            ['method', 'path', 'principal']
         )
         self.scoring_duration_seconds = Histogram(
             'scoring_duration_seconds',
             'Scoring operation duration',
-            ['method', 'cell_line']
+            ['method', 'cell_line', 'principal']
         )
         self.scoring_total = Counter(
             'scoring_total',
             'Total scoring operations',
-            ['method', 'status']
+            ['method', 'status', 'principal']
         )
         self.active_requests = Gauge(
             'active_requests',
@@ -129,7 +129,8 @@ class MetricsCollector:
         method: str,
         path: str,
         status: int,
-        duration: float
+        duration: float,
+        principal: str = "anonymous",
     ):
         """Record HTTP request metrics"""
         if not self.enabled:
@@ -139,11 +140,13 @@ class MetricsCollector:
             self.http_requests_total.labels(
                 method=method,
                 path=path,
-                status=str(status)
+                status=str(status),
+                principal=principal,
             ).inc()
             self.http_request_duration_seconds.labels(
                 method=method,
-                path=path
+                path=path,
+                principal=principal,
             ).observe(duration)
         elif self.backend == 'cloudwatch':
             self._put_cloudwatch_metrics([
@@ -154,7 +157,8 @@ class MetricsCollector:
                     'Dimensions': [
                         {'Name': 'Method', 'Value': method},
                         {'Name': 'Path', 'Value': path},
-                        {'Name': 'Status', 'Value': str(status)}
+                        {'Name': 'Status', 'Value': str(status)},
+                        {'Name': 'Principal', 'Value': principal},
                     ]
                 },
                 {
@@ -163,7 +167,8 @@ class MetricsCollector:
                     'Unit': 'Seconds',
                     'Dimensions': [
                         {'Name': 'Method', 'Value': method},
-                        {'Name': 'Path', 'Value': path}
+                        {'Name': 'Path', 'Value': path},
+                        {'Name': 'Principal', 'Value': principal},
                     ]
                 }
             ])
@@ -173,7 +178,8 @@ class MetricsCollector:
         method: str,
         cell_line: Optional[str],
         duration: float,
-        success: bool
+        success: bool,
+        principal: str = "anonymous",
     ):
         """Record scoring operation metrics"""
         if not self.enabled:
@@ -182,11 +188,13 @@ class MetricsCollector:
         if self.backend == 'prometheus' and PROMETHEUS_AVAILABLE:
             self.scoring_duration_seconds.labels(
                 method=method,
-                cell_line=cell_line or 'all'
+                cell_line=cell_line or 'all',
+                principal=principal,
             ).observe(duration)
             self.scoring_total.labels(
                 method=method,
-                status='success' if success else 'failure'
+                status='success' if success else 'failure',
+                principal=principal,
             ).inc()
         elif self.backend == 'cloudwatch':
             self._put_cloudwatch_metrics([
@@ -196,7 +204,8 @@ class MetricsCollector:
                     'Unit': 'Seconds',
                     'Dimensions': [
                         {'Name': 'Method', 'Value': method},
-                        {'Name': 'CellLine', 'Value': cell_line or 'all'}
+                        {'Name': 'CellLine', 'Value': cell_line or 'all'},
+                        {'Name': 'Principal', 'Value': principal},
                     ]
                 },
                 {
@@ -205,7 +214,8 @@ class MetricsCollector:
                     'Unit': 'Count',
                     'Dimensions': [
                         {'Name': 'Method', 'Value': method},
-                        {'Name': 'Status', 'Value': 'success' if success else 'failure'}
+                        {'Name': 'Status', 'Value': 'success' if success else 'failure'},
+                        {'Name': 'Principal', 'Value': principal},
                     ]
                 }
             ])

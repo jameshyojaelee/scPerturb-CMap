@@ -32,6 +32,11 @@ from scperturb_cmap.data.signatures import (
     target_from_cluster,
     target_from_gene_lists,
 )
+from scperturb_cmap.ui.helpers import (
+    compute_contributions_from_library,
+    load_target_signature_from_json_bytes,
+    persist_exports,
+)
 from scperturb_cmap.io.schemas import TargetSignature
 from scperturb_cmap.viz.plots import (
     plot_moa_enrichment_bar,
@@ -723,7 +728,7 @@ def sidebar_controls(
 
     target_mode = st.sidebar.radio(
         "Target source",
-        ["Demo", "+ Gene lists", "+ .h5ad"],
+        ["Demo", "+ Gene lists", "+ .h5ad", "+ Target JSON"],
         key="target_mode",
     )
 
@@ -809,6 +814,24 @@ def sidebar_controls(
                 reference=reference,
                 method=diff_method,
             )
+    elif target_mode == "+ Target JSON":
+        target_upload = st.sidebar.file_uploader(
+            "Upload TargetSignature JSON (.json/.jsonl)",
+            type=["json", "jsonl"],
+            key="target_json_upload",
+        )
+        if target_upload is None:
+            st.sidebar.info("Upload a TargetSignature export from the CLI or UI.")
+            target_sig = target_from_gene_lists(["G1", "G2"], ["G10"])
+            target_context["note"] = "Awaiting TargetSignature JSON"
+        else:
+            try:
+                target_sig = load_target_signature_from_json_bytes(target_upload.getvalue())
+                target_context["source_file"] = getattr(target_upload, "name", "uploaded")
+                target_context["mode"] = "Target JSON"
+            except Exception as exc:
+                st.sidebar.error(f"Failed to parse TargetSignature: {exc}")
+                target_sig = target_from_gene_lists(["G1", "G2"], ["G10"])
     else:
         default_up = parse_gene_block(DEFAULT_UP_TEXT)
         default_down = parse_gene_block(DEFAULT_DOWN_TEXT)
@@ -895,6 +918,51 @@ def sidebar_controls(
         target_context,
         model_label,
     )
+
+
+def render_qc_panel(summary: Dict[str, Any], target_sig: TargetSignature) -> None:
+    """Display a compact QC dashboard with overlap metrics."""
+    if not summary:
+        return
+
+    cols = st.columns(3)
+    cols[0].metric("Genes", f"{summary.get('n_genes', 0)}")
+    cols[1].metric(
+        "Up / Down",
+        f"{summary.get('n_positive', 0)} / {summary.get('n_negative', 0)}",
+    )
+    overlap_count = summary.get("overlap_genes")
+    overlap_fraction = summary.get("overlap_fraction")
+    if overlap_count is not None and overlap_fraction is not None:
+        cols[2].metric("Overlap", f"{overlap_count} ({overlap_fraction:.0%})")
+        st.progress(min(1.0, max(0.0, overlap_fraction)))
+
+    st.dataframe(
+        pd.DataFrame(summary.items(), columns=["metric", "value"]),
+        width="stretch",
+        hide_index=True,
+    )
+
+    if target_sig.weights:
+        df = pd.DataFrame(
+            {
+                "weight": target_sig.weights,
+                "direction": np.where(np.asarray(target_sig.weights) > 0, "Up", "Down"),
+            }
+        )
+        hist = px.histogram(
+            df,
+            x="weight",
+            color="direction",
+            nbins=30,
+            title="Weight distribution",
+            color_discrete_map={"Up": "#38bdf8", "Down": "#f97316"},
+        )
+        hist.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(15,23,42,0.6)",
+        )
+        st.plotly_chart(hist, use_container_width=True)
 
 
 def plot_signature(ts: TargetSignature, max_genes: int = 10):
@@ -1067,10 +1135,7 @@ def main():
         )
         if summary:
             st.markdown("**Target QC**")
-            st.dataframe(
-                pd.DataFrame(summary.items(), columns=["metric", "value"]),
-                width="stretch",
-            )
+            render_qc_panel(summary, target_sig)
         info_rows: List[Tuple[str, Any]] = []
         if isinstance(target_context, dict):
             if target_context.get("preset"):
@@ -1137,6 +1202,74 @@ def main():
                 disabled=True,
             )
 
+            st.markdown("#### Explain gene contributions")
+            sig_options = table_df["signature_id"].astype(str).unique().tolist()
+            explain_sig = st.selectbox(
+                "Select a signature to explain",
+                sig_options,
+                index=0,
+                key="explain_signature_id",
+            )
+            top_genes = int(
+                st.slider(
+                    "Top genes to display",
+                    min_value=5,
+                    max_value=30,
+                    value=15,
+                    key="explain_top_genes",
+                )
+            )
+            if st.button("Compute SHAP-like contributions", key="explain_button"):
+                try:
+                    contrib_df = compute_contributions_from_library(
+                        target_sig, filtered_library, explain_sig
+                    )
+                except Exception as exc:
+                    st.error(f"Explanation unavailable: {exc}")
+                else:
+                    st.session_state["contrib_result"] = {
+                        "signature": explain_sig,
+                        "data": contrib_df,
+                    }
+            contrib_state = st.session_state.get("contrib_result")
+            if (
+                isinstance(contrib_state, dict)
+                and contrib_state.get("data") is not None
+                and contrib_state.get("signature") == explain_sig
+            ):
+                contrib_df = contrib_state["data"]
+                top_df = contrib_df.head(top_genes)
+                contrib_fig = px.bar(
+                    top_df.sort_values("contribution"),
+                    x="gene",
+                    y="contribution",
+                    color="direction",
+                    color_discrete_map={
+                        "beneficial": "#38bdf8",
+                        "detrimental": "#f97316",
+                    },
+                    title=f"Gene contributions for {explain_sig}",
+                )
+                contrib_fig.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(15,23,42,0.6)",
+                )
+                st.plotly_chart(contrib_fig, use_container_width=True)
+                st.dataframe(
+                    top_df[
+                        [
+                            "gene",
+                            "contribution",
+                            "abs_contribution",
+                            "target_weight",
+                            "drug_weight",
+                            "rank",
+                        ]
+                    ],
+                    hide_index=True,
+                    use_container_width=True,
+                )
+
             export_metadata = build_export_metadata(
                 target_sig,
                 target_context if isinstance(target_context, dict) else {},
@@ -1182,6 +1315,18 @@ def main():
                 mime="application/json",
                 width="stretch",
             )
+            if st.button("Save to examples/out", key="save_examples_out"):
+                timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+                out_dir = Path("examples/out")
+                paths = persist_exports(
+                    out_dir,
+                    stem=f"ui_results_{timestamp}",
+                    csv_bytes=csv_bytes,
+                    json_bytes=json_bytes,
+                    session_bytes=session_bytes,
+                )
+                saved_names = ", ".join(p.name for p in paths.values())
+                st.success(f"Saved session exports to {out_dir} ({saved_names}).")
 
     st.markdown("### Power & QC Analysis")
     power_tabs = st.tabs(
