@@ -289,7 +289,8 @@ async def lifespan(app: FastAPI):
     runtime_settings = _runtime_settings()
     app.state.settings = runtime_settings
     app.state.start_time = time.time()
-    app.state.metrics = get_metrics_collector(
+    existing_metrics = getattr(app.state, "metrics", None)
+    app.state.metrics = existing_metrics or get_metrics_collector(
         backend=runtime_settings.metrics_backend,
         port=runtime_settings.metrics_port,
         namespace=runtime_settings.metrics_namespace,

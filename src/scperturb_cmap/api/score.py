@@ -114,6 +114,12 @@ def _load_parquet_filtered(path: Path, filters: Dict[str, Any]) -> pd.DataFrame:
     scanner = dataset.scanner(filter=filt) if filt is not None else dataset.scanner()
     table = scanner.to_table()
     df = table.to_pandas()
+    # If partition columns are pruned by the scanner, reattach filtered values so downstream
+    # pivots retain cell line metadata.
+    for key, col in [("cell_line", "cell_line"), ("moa", "moa")]:
+        values = _normalize_filter_values(filters.get(key))
+        if values and col not in df.columns:
+            df[col] = values[0]
     logger.info(
         "Loaded %s rows from %s (filters=%s)",
         f"{len(df):,}",
@@ -229,8 +235,10 @@ def rank_drugs(
     warn_cutoff = min(len(t_genes), max(5, int(0.2 * len(t_genes))))
     overlap_warning = overlap < warn_cutoff
     if overlap == 0:
+        examples = ", ".join(sorted(set(t_genes))[:3])
         hint = (
-            "No overlapping genes between target and library. "
+            f"Insufficient gene overlap: 0 of {len(t_genes)} target genes matched the library. "
+            f"Examples missing: {examples}. "
             "Map gene symbols/aliases or restrict to L1000 landmarks."
         )
         raise ValueError(hint)

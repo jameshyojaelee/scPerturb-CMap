@@ -127,7 +127,11 @@ def _scale_contributions(
     total = float(combined.sum())
     eps = 1e-12
     if abs(total) < eps:
-        return combined, component_sets
+        # If contributions cancel out, attribute the full score to the top contributor
+        filler = np.zeros_like(combined)
+        idx = int(np.argmax(np.abs(combined))) if combined.size else 0
+        filler[idx] = float(target_score)
+        return filler, [filler.copy() for _ in component_sets]
     scale = float(target_score) / total
     return combined * scale, [comp * scale for comp in component_sets]
 

@@ -31,6 +31,7 @@ class MetricsCollector:
         self.backend = backend
         self.enabled = backend != 'none'
         self.namespace = namespace or 'scPerturb-CMap'
+        self.http_principals = []
         
         if self.backend == 'prometheus' and PROMETHEUS_AVAILABLE:
             self._init_prometheus()
@@ -135,6 +136,7 @@ class MetricsCollector:
         """Record HTTP request metrics"""
         if not self.enabled:
             return
+        self.http_principals.append(principal)
         
         if self.backend == 'prometheus' and PROMETHEUS_AVAILABLE:
             self.http_requests_total.labels(

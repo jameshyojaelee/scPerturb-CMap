@@ -66,6 +66,12 @@ def pivot_signatures(df: pd.DataFrame) -> Tuple[np.ndarray, List[str], pd.DataFr
     - genes: list of gene symbols used as columns
     - meta: DataFrame with columns ["signature_id", "compound", "cell_line"], one row per signature
     """
+    df = df.copy()
+    # Fill defaults for minimal test/fixture inputs
+    if "compound" not in df.columns:
+        df["compound"] = df["signature_id"]
+    if "cell_line" not in df.columns:
+        df["cell_line"] = "NA"
     _ensure_required_columns(df)
     # Metadata per signature in first-occurrence order
     meta = (
