@@ -63,6 +63,9 @@ scperturb-cmap score \
   DualEncoder.
 - `--cell-line`, `--moa`, `--dose-range` filter the library on the fly.
 - `--json-output` emits results + metadata as JSON.
+- Overlap guardrail: errors like "No overlapping genes" mean your target does not intersect the
+  library. Harmonise symbols (e.g., map aliases), pass `--library-genes` to `make-target` for QC,
+  or restrict to L1000 landmarks.
 
 ## `power`
 

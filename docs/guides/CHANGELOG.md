@@ -14,6 +14,7 @@ scPerturb-CMap 0.2.0 lands with env-driven API configuration (cache TTLs, reques
 - Consolidated generated artifacts under `workspace/` and updated tooling to use environment Python.
 - Bumped project version metadata to 0.2.0.
 - Documented that `make acceptance` remains a local-only smoke test.
+- Explainability contributions now mirror the active scoring method (cosine+GSEA or metric) and rescale to the reported score so narratives and waterfalls match the ranked outputs.
 
 ### Fixed
 - Acceptance harness now respects the active Python interpreter instead of assuming `.venv` paths.

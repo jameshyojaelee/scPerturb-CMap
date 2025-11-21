@@ -7,7 +7,7 @@ from typing import Any, Dict
 from celery.utils.log import get_task_logger
 from fastapi import HTTPException
 
-from scperturb_cmap.api.runtime import get_lincs_library, get_model_path
+from scperturb_cmap.api.runtime import get_model_path
 from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.api.settings import get_api_settings
 from scperturb_cmap.io.schemas import TargetSignature
@@ -46,7 +46,6 @@ def score_target_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError(msg) from exc
 
     try:
-        library_df = get_lincs_library(settings)
         model_path = get_model_path(settings, required=method.lower() == "metric")
     except HTTPException as exc:
         # Surface FastAPI HTTP exceptions as task failures; the API layer will expose the message.
@@ -56,14 +55,19 @@ def score_target_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
 
     task_logger.info("Scoring target via Celery (method=%s, top_k=%s).", method, payload.get("top_k"))
 
+    filters = {}
+    if payload.get("cell_line"):
+        filters["cell_line"] = [payload["cell_line"]]
+
     result = rank_drugs(
         target_signature=target,
-        library=library_df,
+        library=settings.lincs_path,
         method=method,
         model_path=model_path,
         top_k=int(payload.get("top_k", 50)),
         blend=float(payload.get("blend", 0.5)),
         auto_blend=bool(payload.get("auto_blend", False)),
+        filters=filters or None,
     )
 
     execution_time = time.time() - start_time

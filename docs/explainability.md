@@ -14,17 +14,22 @@ Traditional connectivity mapping produces ranked lists of compounds but leaves t
 
 ---
 
+> **Metric sign convention:** the DualEncoder metric model is trained on *negated* LINCS signatures.
+> At inference time we negate library vectors before embedding them so lower scores still correspond
+> to stronger predicted inversions. If you fine-tune a model without negation, remove that flip in
+> `api.score._metric_scores` to keep the sign convention consistent.
+
 ## Features
 
 ### 1. SHAP-Like Gene Contributions
 
-**What it does:** Decomposes the overall connectivity score into individual gene contributions, similar to SHAP (SHapley Additive exPlanations) values.
+**What it does:** Decomposes the overall connectivity score into individual gene contributions, matched to the exact scoring path (cosine-only, blended cosine+GSEA, or the DualEncoder metric).
 
 **Output:**
-- Each gene gets a contribution score representing its impact on the ranking
-- Contributions sum to approximate the total connectivity score
-- Positive contributions = beneficial gene inversion
-- Negative contributions = poor alignment or off-target effects
+- Genes are aligned to the same sorted order used during scoring (pivoted library genes).
+- Contributions are computed with the same similarity as ranking: cosine + GSEA (baseline) or DualEncoder gradients (metric).
+- Contributions sum to the reported score (when `target_score` is provided).
+- Negative values **lower** the score (better rank); positive values raise it.
 
 **Example:**
 ```python
@@ -34,7 +39,9 @@ analyzer = GeneContributionAnalyzer()
 contributions = analyzer.compute_contributions(
     target_signature=target_weights,
     drug_signature=drug_weights,
-    gene_names=gene_list
+    gene_names=gene_list,
+    method="baseline",          # cosine + GSEA (matches default scoring)
+    target_score=score_from_rank # rescale so contributions sum to the reported score
 )
 
 print(contributions.head(10))
@@ -42,14 +49,19 @@ print(contributions.head(10))
 
 **Output:**
 ```
-        gene  target_weight  drug_weight  contribution  direction
-0        TOX           4.12       -3.87         0.425  beneficial
-1      PDCD1           3.87       -3.21         0.389  beneficial
-2      IFNG          -4.52        4.21         0.376  beneficial
-3       GZMB          -3.98        3.67         0.342  beneficial
-4       VIM            5.21       -2.43         0.298  beneficial
+        gene  target_weight  drug_weight  contribution direction
+0        TOX           4.12       -3.87        -0.425     helps
+1      PDCD1           3.87       -3.21        -0.389     helps
+2      IFNG          -4.52        4.21        -0.376     helps
+3       GZMB          -3.98        3.67        -0.342     helps
+4       VIM            5.21       -2.43        -0.298     helps
 ...
 ```
+
+**How it’s computed**
+- **Cosine / baseline:** target and library vectors are standardized exactly as in `rank_drugs`; cosine contributions are combined with GSEA running-sum contributions (50/50 by default) and optionally rescaled to the final ranking score.
+- **Metric:** uses the DualEncoder checkpoint, aligns genes to the library order, and takes gradients of the similarity w.r.t. the library vector to attribute the score. When a blend is used, the baseline cosine+GSEA component is mixed with the metric contributions using the same weight.
+- Pass `target_score` when you already have the ranking table so the contributions add up precisely to the reported score.
 
 ---
 
@@ -70,8 +82,8 @@ fig = create_waterfall_plot(
 ```
 
 **Interpretation:**
-- **Blue bars**: Genes with beneficial contributions (good alignment)
-- **Red bars**: Genes with detrimental contributions (poor alignment)
+- **Blue bars**: Genes that lower the score (improve rank)
+- **Red bars**: Genes that raise the score
 - **Bar length**: Magnitude of contribution
 - **Total shown**: Sum of contributions from displayed genes
 
@@ -88,8 +100,8 @@ fig = create_waterfall_plot(
 ```python
 from scperturb_cmap.explainability.pathway_enrichment import integrate_go_kegg_reactome
 
-# Get top beneficial genes
-top_genes = contributions[contributions['contribution'] > 0].head(50)['gene'].tolist()
+# Get top score-lowering genes
+top_genes = contributions[contributions['contribution'] < 0].head(50)['gene'].tolist()
 
 # Run enrichment
 enrichment = integrate_go_kegg_reactome(
@@ -433,10 +445,10 @@ uncertainty = quantifier.jackknife_variance(target, drug, scoring_func)
 ## Interpreting Outputs
 
 ### Gene Contributions
-- **Positive contribution**: Gene is inverted in beneficial direction
+- **Negative contribution**: Lowers the score (improves rank)
   - Target ↑, Drug ↓ → reversal (good)
   - Target ↓, Drug ↑ → reversal (good)
-- **Negative contribution**: Gene is inverted in detrimental direction or not inverted
+- **Positive contribution**: Raises the score (hurts rank)
   - Target ↑, Drug ↑ → amplification (bad for reversal)
   - Target ↓, Drug ↓ → amplification (bad for reversal)
 

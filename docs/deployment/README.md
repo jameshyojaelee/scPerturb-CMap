@@ -45,6 +45,9 @@ This directory contains comprehensive deployment documentation for production en
 - Structured JSON logs are emitted when `SCPC_JSON_LOGS=true`, capturing method, path, status, duration, client, and a sanitized principal label (never the secret key).
 - Metrics now include the principal label as a low-cardinality dimension on HTTP/scoring counters to align dashboards with authentication context.
 - Keep Redis/Postgres readiness checks optional by toggling `SCPC_READINESS_CHECK_REDIS` / `SCPC_READINESS_CHECK_POSTGRES` when those services are absent from your deployment tier.
+- Scoring against Parquet datasets now uses `pyarrow.dataset` predicate pushdown (cell_line/moa/signature_id).
+  Provide those filters from the API/CLI/UI to avoid materializing all partitions in memory; expect scans to
+  stay bound to the filtered partitions when datasets are partitioned accordingly.
 
 ## Quick Links
 

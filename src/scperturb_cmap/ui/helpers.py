@@ -41,6 +41,11 @@ def compute_contributions_from_library(
     target_sig: TargetSignature,
     library_df: pd.DataFrame,
     signature_id: str,
+    *,
+    method: str = "baseline",
+    final_score: float | None = None,
+    blend_weight: float = 0.5,
+    model_path: str | None = None,
 ) -> pd.DataFrame:
     """
     Compute SHAP-like gene contributions for a library signature.
@@ -49,6 +54,10 @@ def compute_contributions_from_library(
         target_sig: TargetSignature representing the query.
         library_df: Long-form LINCS table with columns signature_id, gene_symbol, score.
         signature_id: Signature to explain.
+        method: Scoring method alignment ('baseline', 'cosine', or 'metric').
+        final_score: Optional final score used during ranking (for rescaling).
+        blend_weight: Weight for GSEA component when using the baseline explainer.
+        model_path: Path to DualEncoder checkpoint when method='metric'.
     """
     required = {"signature_id", "gene_symbol", "score"}
     if not required.issubset(set(library_df.columns)):
@@ -66,11 +75,19 @@ def compute_contributions_from_library(
     if not overlap_keys:
         raise ValueError(f"No overlapping genes for signature '{signature_id}'.")
 
-    ordered_genes = [target_map[g][0] for g in overlap_keys]
-    target_vector = [target_map[g][1] for g in overlap_keys]
-    drug_vector = [score_map[g] for g in overlap_keys]
+    ordered_genes = sorted(overlap_keys)
+    target_vector = [target_map[g][1] for g in ordered_genes]
+    drug_vector = [score_map[g] for g in ordered_genes]
 
-    contrib = compute_gene_contributions(target_vector, drug_vector, ordered_genes)
+    contrib = compute_gene_contributions(
+        target_vector,
+        drug_vector,
+        [target_map[g][0] for g in ordered_genes],
+        method=method,
+        target_score=final_score,
+        blend_weight=blend_weight,
+        model_path=model_path,
+    )
     contrib["signature_id"] = signature_id
     return contrib.sort_values("abs_contribution", ascending=False).reset_index(drop=True)
 

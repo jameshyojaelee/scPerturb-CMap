@@ -1143,6 +1143,17 @@ def main():
                 info_rows.append(("Preset", target_context["preset"]))
             mode_hint = target_context.get("mode", st.session_state.get("target_mode"))
             info_rows.append(("Mode", mode_hint))
+        if score_metadata.get("overlap_genes") is not None:
+            og = score_metadata.get("overlap_genes")
+            tg = score_metadata.get("target_genes") or len(target_sig.genes)
+            frac = score_metadata.get("overlap_fraction")
+            frac_text = f"{frac:.0%}" if isinstance(frac, float) else ""
+            info_rows.append(("Overlap", f"{og}/{tg} {frac_text}".strip()))
+            if score_metadata.get("overlap_warning"):
+                st.warning(
+                    "Low overlap between target and library; check gene symbol harmonisation.",
+                    icon="⚠️",
+                )
         info_rows.append(("Up genes", sum(1 for w in target_sig.weights if w > 0)))
         info_rows.append(("Down genes", sum(1 for w in target_sig.weights if w < 0)))
         info_rows.append(("Library", Path(str(selected_library_path)).name))
@@ -1225,8 +1236,19 @@ def main():
                 )
                 if st.button("Compute SHAP-like contributions", key="explain_button"):
                     try:
+                        score_lookup = None
+                        if ranking_df is not None and "signature_id" in ranking_df.columns:
+                            match = ranking_df[ranking_df["signature_id"] == explain_sig]
+                            if not match.empty:
+                                score_lookup = float(match.iloc[0]["score"])
                         contrib_df = compute_contributions_from_library(
-                            target_sig, filtered_library, explain_sig
+                            target_sig,
+                            filtered_library,
+                            explain_sig,
+                            method=method,
+                            final_score=score_lookup,
+                            blend_weight=blend_arg,
+                            model_path=model_file,
                         )
                     except Exception as exc:
                         st.error(f"Explanation unavailable: {exc}")
@@ -1249,8 +1271,8 @@ def main():
                         y="contribution",
                         color="direction",
                         color_discrete_map={
-                            "beneficial": "#38bdf8",
-                            "detrimental": "#f97316",
+                            "helps": "#38bdf8",
+                            "hurts": "#f97316",
                         },
                         title=f"Gene contributions for {explain_sig}",
                     )

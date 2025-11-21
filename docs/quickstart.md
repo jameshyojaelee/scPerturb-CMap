@@ -40,7 +40,9 @@ scperturb-cmap score \
 The resulting Parquet file contains the top hits with z-scores, p-values, and
 mechanism-of-action annotations. Acceptance tests (`python3 -m
 scripts.check_acceptance`) run the same workflow and verify that the metric
-model improves recall.
+model improves recall. If a run fails with **“No overlapping genes”**, harmonise gene
+symbols/aliases (e.g., via `make-target --library-genes`), restrict to L1000 landmarks, or
+subset the library to matching genes before rerunning.
 
 ## Streamlit UI Exports & Bookmarks
 

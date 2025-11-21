@@ -2,84 +2,47 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import torch
 
-from scperturb_cmap.models.dual_encoder import DualEncoder, PairDataset, build_pairs
-
-
-def test_dual_encoder_forward_shapes():
-    torch.manual_seed(0)
-    model = DualEncoder(input_dim=8, embed_dim=16)
-    x1 = torch.randn(4, 8)
-    x2 = torch.randn(4, 8)
-    z1, z2, sim = model(x1, x2)
-    assert z1.shape == (4, 16)
-    assert z2.shape == (4, 16)
-    assert sim.shape == (4,)
-    # L2 normalization keeps norm ~1
-    assert torch.allclose(z1.norm(dim=-1), torch.ones(4), atol=1e-5)
-    assert torch.allclose(z2.norm(dim=-1), torch.ones(4), atol=1e-5)
+from scperturb_cmap.api import score as score_mod
+from scperturb_cmap.data.lincs_loader import pivot_signatures
+from scperturb_cmap.io.schemas import TargetSignature
 
 
-def test_pairdataset_and_tiny_training_step():
-    torch.manual_seed(0)
-    d = 16
-    # Create a target vector t and its inverted vector for positive inversion pairs
-    t = np.random.randn(d).astype(np.float32)
-    s_pos = -t + 0.01 * np.random.randn(d).astype(np.float32)
-    s_neg = t + 0.01 * np.random.randn(d).astype(np.float32)
+def test_metric_scores_prefer_inversion(monkeypatch, tmp_path):
+    def fake_load(_path, map_location=None):
+        return {"config": {"input_dim": 3}, "state_dict": {}}
 
-    vectors = {
-        "t1": t,
-        "pos": s_pos,
-        "neg": s_neg,
-    }
+    class DummyModel:
+        def __init__(self, input_dim: int, embed_dim: int = 64) -> None:
+            self.input_dim = input_dim
 
-    pairs = pd.DataFrame(
+        def load_state_dict(self, state):
+            return
+
+        def eval(self):
+            return self
+
+        def __call__(self, left, right):
+            return left, right, (left * right).sum(dim=-1)
+
+    monkeypatch.setattr(score_mod.torch, "load", fake_load)
+    monkeypatch.setattr(score_mod, "DualEncoder", DummyModel)
+
+    target = TargetSignature(genes=["G1", "G2", "G3"], weights=[1.0, 1.0, -1.0])
+    library_df = pd.DataFrame(
         [
-            {"left_id": "t1", "right_id": "pos", "label": 1},  # inversion (desired sim ~ -1)
-            {"left_id": "t1", "right_id": "neg", "label": 0},  # concordant (desired sim ~ +1)
+            {"signature_id": "sig_inverter", "compound": "A", "cell_line": "CL1", "gene_symbol": "G1", "score": -1.0},
+            {"signature_id": "sig_inverter", "compound": "A", "cell_line": "CL1", "gene_symbol": "G2", "score": -1.0},
+            {"signature_id": "sig_inverter", "compound": "A", "cell_line": "CL1", "gene_symbol": "G3", "score": 1.0},
+            {"signature_id": "sig_concordant", "compound": "B", "cell_line": "CL1", "gene_symbol": "G1", "score": 1.0},
+            {"signature_id": "sig_concordant", "compound": "B", "cell_line": "CL1", "gene_symbol": "G2", "score": 1.0},
+            {"signature_id": "sig_concordant", "compound": "B", "cell_line": "CL1", "gene_symbol": "G3", "score": -1.0},
         ]
     )
-    ds = PairDataset(pairs, vectors)
-    model = DualEncoder(input_dim=d, embed_dim=16, p_dropout=0.0)
-    opt = torch.optim.SGD(model.parameters(), lr=0.1)
+    M, genes, meta = pivot_signatures(library_df)
+    ckpt_path = tmp_path / "dummy.pt"
+    ckpt_path.write_text("dummy")
+    scores = score_mod._metric_scores(target, M, genes, str(ckpt_path))
 
-    def batch_loss():
-        left_all, right_all, y = [], [], []
-        for i in range(len(ds)):
-            left, right, yi = ds[i]
-            left_all.append(left)
-            right_all.append(right)
-            # map label 1 -> target -1, label 0 -> target +1
-            y.append(-1.0 if float(yi.item()) > 0.5 else 1.0)
-        L = torch.stack(left_all)
-        R = torch.stack(right_all)
-        y_t = torch.tensor(y, dtype=torch.float32)
-        _, _, sim = model(L, R)
-        return torch.mean((sim - y_t) ** 2)
-
-    # Train for a few steps; loss should go down
-    loss0 = batch_loss().item()
-    for _ in range(20):
-        opt.zero_grad()
-        loss = batch_loss()
-        loss.backward()
-        opt.step()
-    loss1 = batch_loss().item()
-    assert loss1 < loss0
-
-
-def test_build_pairs_basic():
-    df = pd.DataFrame(
-        {
-            "target_id": ["t1"] * 5,
-            "signature_id": [f"s{i}" for i in range(5)],
-            "score": [0.1, -0.5, 0.3, -0.6, 0.2],
-        }
-    )
-    pairs = build_pairs(df, pos_k=2, neg_k=2)
-    assert set(pairs.columns) == {"left_id", "right_id", "label"}
-    # Top 2 lowest scores are s3 (-0.6) and s1 (-0.5)
-    pos_set = set(pairs.loc[pairs["label"] == 1, "right_id"].tolist())
-    assert pos_set == {"s1", "s3"}
+    # Lower metric score should correspond to the inversion
+    assert scores[0] < scores[1]

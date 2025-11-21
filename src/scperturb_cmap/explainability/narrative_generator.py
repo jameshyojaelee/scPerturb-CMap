@@ -175,18 +175,19 @@ class DrugNarrativeGenerator:
         top_genes = contributions.head(10)
         
         # Categorize by contribution direction
-        beneficial = top_genes[top_genes['contribution'] > 0]
+        beneficial = top_genes[top_genes['contribution'] < 0]
         
         # Create gene list narrative
         gene_narratives = []
         for _, row in beneficial.head(5).iterrows():
             gene = row['gene']
             contrib = row['contribution']
+            magnitude = abs(contrib)
             
             # Describe the inversion
-            if contrib > 0.1:
+            if magnitude > 0.1:
                 strength = "strongly inverts"
-            elif contrib > 0.05:
+            elif magnitude > 0.05:
                 strength = "moderately inverts"
             else:
                 strength = "inverts"
@@ -271,7 +272,7 @@ class DrugNarrativeGenerator:
     ) -> str:
         """Generate conclusion summary"""
         # Count mechanisms (gene-level + pathway-level)
-        n_gene_mechanisms = len(contributions[contributions['contribution'] > 0.05])
+        n_gene_mechanisms = len(contributions[contributions['abs_contribution'] > 0.05])
         n_pathway_mechanisms = 0
         if enrichment_results is not None and not enrichment_results.empty:
             n_pathway_mechanisms = len(enrichment_results[enrichment_results['q_value'] < 0.05])
@@ -279,7 +280,7 @@ class DrugNarrativeGenerator:
         total_mechanisms = min(n_gene_mechanisms + n_pathway_mechanisms, 10)
         
         # Assess confidence
-        top_contrib = contributions.iloc[0]['contribution'] if not contributions.empty else 0
+        top_contrib = contributions.iloc[0]['abs_contribution'] if not contributions.empty else 0
         if top_contrib > 0.2:
             confidence = "high"
         elif top_contrib > 0.1:

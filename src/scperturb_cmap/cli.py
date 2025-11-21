@@ -539,6 +539,23 @@ def diagnose() -> None:
     print(json.dumps(info, indent=2))
 
 
+@app.command("benchmark")
+def benchmark(
+    output_dir: str = typer.Option("results/benchmarks", help="Directory to write benchmark results"),
+    dataset: Optional[str] = typer.Option(
+        None,
+        help="Optional dataset to benchmark against (defaults to examples/data/benchmark_synthetic.csv)",
+    ),
+) -> None:
+    """Run a lightweight benchmarking harness comparing scPerturb-CMap to a random baseline."""
+    from scperturb_cmap.benchmarking import run_benchmark_suite
+
+    out = Path(output_dir)
+    metrics = run_benchmark_suite(out, dataset_path=dataset)
+    typer.echo(f"Wrote benchmark metrics: {metrics}")
+    typer.echo(f"Artifacts -> {out}")
+
+
 @app.command("prepare-lincs")
 def prepare_lincs(
     input: Optional[str] = typer.Option(
@@ -1057,7 +1074,20 @@ def score(
         top_k=top_k,
         blend=blend,
         auto_blend=auto_blend,
+        filters={"cell_line": selected_cells} if selected_cells else None,
     )
+    overlap_meta = getattr(res, "metadata", {}) or {}
+    if overlap_meta.get("overlap_genes") is not None:
+        frac = overlap_meta.get("overlap_fraction")
+        frac_text = f"{frac:.1%}" if isinstance(frac, (float, int)) else ""
+        typer.echo(
+            f"[info] overlap: {overlap_meta.get('overlap_genes')}/{overlap_meta.get('target_genes')} {frac_text}".strip()
+        )
+        if overlap_meta.get("overlap_warning"):
+            typer.echo(
+                "[warn] Low overlap between target and library; check gene symbols or supply landmarks.",
+                err=True,
+            )
     out_df = pd.DataFrame(res.model_dump()["ranking"])  # serialized as list-of-dicts
     # Optional FDR q-values (per query) using Benjamini–Hochberg
     try:
@@ -1096,6 +1126,9 @@ def score(
             "auto_blend": bool(auto_blend),
             "blend": blend_val,
             "model_path": model_path,
+            "overlap_genes": overlap_meta.get("overlap_genes"),
+            "target_genes": overlap_meta.get("target_genes"),
+            "overlap_fraction": overlap_meta.get("overlap_fraction"),
         }
         payload = {"results": out_df.to_dict(orient="records"), "meta": meta}
         Path(json_output).write_text(json.dumps(payload, indent=2))

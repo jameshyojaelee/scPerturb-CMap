@@ -4,6 +4,9 @@ Thanks for your interest in contributing! This project aims to provide a clean,
 testable scaffold for single-cell connectivity mapping with both baseline and
 learned (metric) methods.
 
+For a fast start, follow `docs/contributing/ONBOARDING.md`. Please also review the
+[Code of Conduct](../../CODE_OF_CONDUCT.md) before contributing.
+
 ## Development Setup
 
 - Fork and branch: create a feature branch off `main`.
@@ -12,6 +15,8 @@ learned (metric) methods.
 - Lint: `make lint` (Ruff, line length 100, target Python 3.10+).
 - Test: `make test` (pytest; add unit tests for new code). Prefer fast,
   deterministic tests.
+- pre-commit: `pre-commit install` to run `ruff` and `pytest -q` on staged files. Config lives in
+  `.pre-commit-config.yaml`.
 - Demo checks: `make demo` to generate demo data and verify scoring works;
   `make ui` to sanity-check the app.
 - Commit messages: use concise, descriptive messages (e.g.,

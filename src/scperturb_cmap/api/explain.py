@@ -55,7 +55,10 @@ class ExplainabilityEngine:
         drug_signature: Dict[str, float],
         drug_metadata: Dict,
         output_dir: Optional[str] = None,
-        create_plots: bool = True
+        create_plots: bool = True,
+        scoring_method: str = "cosine",
+        blend_weight: float = 0.5,
+        model_path: Optional[str] = None,
     ) -> Dict:
         """
         Generate complete explanation for a single drug's ranking
@@ -85,20 +88,26 @@ class ExplainabilityEngine:
         
         # 1. Compute gene contributions
         contributions = self.analyzer.compute_contributions(
-            target_array, drug_array, common_genes
+            target_array,
+            drug_array,
+            common_genes,
+            method=scoring_method,
+            blend_weight=blend_weight,
+            target_score=drug_metadata.get("score"),
+            model_path=model_path,
         )
         
         # 2. Identify key genes
-        positive_genes, negative_genes = self.analyzer.identify_key_genes(
+        helpful_genes, harmful_genes = self.analyzer.identify_key_genes(
             contributions, top_n=50
         )
         
         # 3. Pathway enrichment (if enabled)
         enrichment_results = None
-        if self.enable_pathway_enrichment and len(positive_genes) >= 5:
+        if self.enable_pathway_enrichment and len(helpful_genes) >= 5:
             try:
                 enrichment_results = integrate_go_kegg_reactome(
-                    positive_genes['gene'].tolist(),
+                    helpful_genes['gene'].tolist(),
                     top_n_pathways=20
                 )
             except Exception as e:
@@ -145,15 +154,15 @@ class ExplainabilityEngine:
             'drug_name': drug_name,
             'metadata': drug_metadata,
             'contributions': contributions,
-            'positive_drivers': positive_genes,
-            'negative_drivers': negative_genes,
+            'positive_drivers': helpful_genes,
+            'negative_drivers': harmful_genes,
             'enrichment': enrichment_results,
             'narrative': narrative,
             'plots': plots,
             'summary': {
                 'total_genes': len(common_genes),
-                'n_beneficial_genes': len(positive_genes),
-                'n_detrimental_genes': len(negative_genes),
+                'n_score_lowering_genes': len(helpful_genes),
+                'n_score_raising_genes': len(harmful_genes),
                 'top_gene': contributions.iloc[0]['gene'],
                 'top_contribution': contributions.iloc[0]['contribution'],
             }
@@ -187,12 +196,22 @@ class ExplainabilityEngine:
         # Collect contributions for all drugs
         contributions_dict = {}
         enrichment_dict = {}
+        scoring_method = score_result.method
+        blend_weight = float(score_result.metadata.get("blend", 0.5)) if isinstance(score_result.metadata, dict) else 0.5
+        model_path = None
+        if scoring_method == "metric":
+            model_path = score_result.metadata.get("model_path") if isinstance(score_result.metadata, dict) else None
         
         for idx, row in top_drugs.iterrows():
             drug_name = row['compound']
             
             # Get drug signature from library
-            drug_data = library[library['compound'] == drug_name]
+            signature_id = row.get("signature_id")
+            drug_data = pd.DataFrame()
+            if signature_id is not None and "signature_id" in library.columns:
+                drug_data = library[library['signature_id'] == signature_id]
+            if drug_data.empty:
+                drug_data = library[library['compound'] == drug_name]
             if drug_data.empty:
                 continue
             
@@ -215,7 +234,10 @@ class ExplainabilityEngine:
                 drug_sig,
                 metadata,
                 output_dir=output_dir,
-                create_plots=(output_dir is not None)
+                create_plots=(output_dir is not None),
+                scoring_method=scoring_method,
+                blend_weight=blend_weight,
+                model_path=model_path,
             )
             
             contributions_dict[drug_name] = explanation['contributions']
@@ -239,7 +261,10 @@ class ExplainabilityEngine:
         drug_b_signature: Dict[str, float],
         drug_a_metadata: Dict,
         drug_b_metadata: Dict,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        scoring_method: str = "cosine",
+        blend_weight: float = 0.5,
+        model_path: Optional[str] = None,
     ) -> Dict:
         """
         Compare two drugs to explain ranking difference
@@ -271,10 +296,20 @@ class ExplainabilityEngine:
         
         # Compute contributions
         contrib_a = self.analyzer.compute_contributions(
-            target_array, drug_a_array, common_genes
+            target_array,
+            drug_a_array,
+            common_genes,
+            method=scoring_method,
+            blend_weight=blend_weight,
+            model_path=model_path,
         )
         contrib_b = self.analyzer.compute_contributions(
-            target_array, drug_b_array, common_genes
+            target_array,
+            drug_b_array,
+            common_genes,
+            method=scoring_method,
+            blend_weight=blend_weight,
+            model_path=model_path,
         )
         
         # Create comparison plot

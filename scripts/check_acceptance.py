@@ -20,6 +20,7 @@ from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.data.lincs_loader import load_lincs_long
 from scperturb_cmap.data.pairs import prepare_pair_table
 from scperturb_cmap.io.schemas import TargetSignature
+from scperturb_cmap.benchmarking import run_benchmark_suite
 from scperturb_cmap.models.dual_encoder import DualEncoder
 from scperturb_cmap.models.train import load_real_dataset
 
@@ -256,13 +257,25 @@ def check_metric_improves() -> dict:
     }
 
 
+def run_benchmark_smoke() -> dict:
+    """Run a lightweight benchmark to compare against a random baseline."""
+    out_dir = Path("results/benchmarks")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    metrics = run_benchmark_suite(out_dir, dataset_path="examples/data/benchmark_synthetic.csv")
+    baseline = metrics.get("scperturb_baseline", {})
+    random_res = metrics.get("random", {})
+    ok = baseline.get("recall@1", 0) >= random_res.get("recall@1", 0)
+    return {"ok": ok, "metrics": metrics, "artifact_dir": str(out_dir)}
+
+
 def main() -> None:
     df_long = ensure_demo()
     baseline = check_baseline_time(df_long)
     metric = check_metric_improves()
-    results = {"baseline_time": baseline, "metric_improvement": metric}
+    benchmark = run_benchmark_smoke()
+    results = {"baseline_time": baseline, "metric_improvement": metric, "benchmark": benchmark}
     print(json.dumps(results, indent=2))
-    if not (baseline["ok"] and metric["ok"]):
+    if not (baseline["ok"] and metric["ok"] and benchmark["ok"]):
         raise SystemExit(1)
 
 

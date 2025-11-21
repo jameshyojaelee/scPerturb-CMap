@@ -115,6 +115,7 @@ make test
 6. **Validate & automate** – Use `make acceptance` for smoke tests, `make lint`/`make test` in CI, and the HPC scripts under `scripts/slurm/` for batch jobs.
 
 > `make acceptance` is designed as a local smoke test and is not executed as part of the default CI workflows.
+> Metric note: the DualEncoder is trained on negated LINCS signatures; inference negates library vectors so **lower scores still indicate a stronger inversion**. If you fine-tune without negation, drop that flip in `api.score._metric_scores`.
 
 
 **Recall@50 by cell line**
@@ -273,3 +274,10 @@ Each case study includes:
 - Suggested experimental validations
 - Literature citations
 - MOA enrichment analysis
+
+## Contributing
+
+- Quick start: `docs/contributing/ONBOARDING.md`
+- Guidelines: `docs/contributing/CONTRIBUTING.md`
+- Conduct: `CODE_OF_CONDUCT.md`
+- Templates: `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md`

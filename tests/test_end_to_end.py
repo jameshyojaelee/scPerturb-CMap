@@ -5,6 +5,7 @@ import json
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.data.lincs_loader import load_lincs_long
@@ -73,10 +74,18 @@ def test_compute_contributions_from_library():
             {"signature_id": "sigA", "gene_symbol": "B", "score": 0.25},
         ]
     )
-    contrib = compute_contributions_from_library(ts, library_df, "sigA")
+    ranked = rank_drugs(ts, library_df, method="baseline", top_k=5)
+    score_val = float(ranked.ranking.iloc[0]["score"])
+    contrib = compute_contributions_from_library(
+        ts,
+        library_df,
+        "sigA",
+        final_score=score_val,
+    )
     assert not contrib.empty
     assert "signature_id" in contrib.columns
     assert contrib["signature_id"].iloc[0] == "sigA"
+    assert pytest.approx(contrib["contribution"].sum(), rel=1e-6) == score_val
 
 
 def test_persist_exports(tmp_path: Path):

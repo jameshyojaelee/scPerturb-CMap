@@ -164,8 +164,8 @@ class PathwayEnricher:
         Separate enrichment for positively and negatively contributing genes
         
         Args:
-            positive_genes: Genes with beneficial contributions
-            negative_genes: Genes with detrimental contributions
+            positive_genes: Genes with score-lowering contributions (helpful)
+            negative_genes: Genes with score-raising contributions (harmful)
             libraries: Pathway libraries to query
             p_threshold: P-value threshold
         

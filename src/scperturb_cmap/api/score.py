@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -23,6 +24,8 @@ LibraryType = Union[
     pd.DataFrame,  # long form with gene_symbol/score
     Tuple[np.ndarray, List[str], pd.DataFrame],  # (matrix, genes, meta)
     Dict[str, Any],  # {"matrix": ndarray, "genes": list[str], "meta": DataFrame}
+    str,
+    Path,
 ]
 
 
@@ -71,6 +74,61 @@ def _as_pivot(library: LibraryType) -> Tuple[np.ndarray, List[str], pd.DataFrame
         return M, genes, meta, long_df
 
     raise TypeError("Unsupported library type; expected DataFrame, (matrix, genes, meta), or dict")
+
+
+def _normalize_filter_values(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [str(v) for v in value if str(v)]
+
+
+def _filter_dataframe(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
+    out = df
+    for key, col in [("cell_line", "cell_line"), ("moa", "moa"), ("signature_id", "signature_id")]:
+        values = _normalize_filter_values(filters.get(key))
+        if values and col in out.columns:
+            out = out[out[col].astype(str).isin(set(values))]
+    return out
+
+
+def _load_parquet_filtered(path: Path, filters: Dict[str, Any]) -> pd.DataFrame:
+    try:
+        import pyarrow.dataset as ds
+    except ImportError as exc:  # pragma: no cover - optional dep
+        raise RuntimeError("pyarrow is required to read Parquet datasets") from exc
+
+    dataset = ds.dataset(str(path), format="parquet")
+    exprs = []
+    names = set(dataset.schema.names)
+    for key, col in [("cell_line", "cell_line"), ("moa", "moa"), ("signature_id", "signature_id")]:
+        values = _normalize_filter_values(filters.get(key))
+        if values and col in names:
+            exprs.append(ds.field(col).isin(sorted(set(values))))
+    filt = None
+    if exprs:
+        filt = exprs[0]
+        for e in exprs[1:]:
+            filt = filt & e
+    scanner = dataset.scanner(filter=filt) if filt is not None else dataset.scanner()
+    table = scanner.to_table()
+    df = table.to_pandas()
+    logger.info(
+        "Loaded %s rows from %s (filters=%s)",
+        f"{len(df):,}",
+        path,
+        {k: v for k, v in filters.items() if v},
+    )
+    return df
+
+
+def _load_library_with_filters(library: LibraryType | str | Path, filters: Optional[Dict[str, Any]]) -> LibraryType:
+    if isinstance(library, (str, Path)):
+        return _load_parquet_filtered(Path(library), filters or {})
+    if isinstance(library, pd.DataFrame):
+        return _filter_dataframe(library.copy(), filters or {})
+    return library
 
 
 def _zscore(x: np.ndarray) -> np.ndarray:
@@ -136,12 +194,14 @@ def _metric_scores(
             R_np = np.concatenate([M, padR], axis=1)
         else:
             R_np = M[:, :input_dim]
+        # Training uses negated LINCS signatures; mirror that at inference time.
+        R_np = -R_np
         R = torch.tensor(R_np, dtype=torch.float32)
         _, zR, _ = model(R, R)
         zR = zR / (zR.norm(p=2, dim=-1, keepdim=True) + 1e-12)
         sim = (zR @ zL.squeeze(0))  # shape [num_signatures]
-    # Lower is better (negative implies inversion)
-    return sim.numpy()
+    # Lower is better (more negative implies stronger inversion)
+    return (-sim.numpy())
 
 
 def rank_drugs(
@@ -152,25 +212,34 @@ def rank_drugs(
     top_k: int = 50,
     blend: float = 0.5,
     auto_blend: bool = False,
+    filters: Optional[Dict[str, Any]] = None,
 ) -> ScoreResult:
+    library = _load_library_with_filters(library, filters)
+    if isinstance(library, pd.DataFrame) and len(library) > 1_000_000:
+        logger.warning(
+            "Scoring with a large library (%s rows); consider applying filters or partitioning.",
+            f"{len(library):,}",
+        )
     M, genes, meta, long_df = _as_pivot(library)
 
-    # Guardrail: minimum overlap if target is large
     t_genes = harmonize_symbols(target_signature.genes)
     lib_genes = harmonize_symbols(genes)
     overlap = len(set(t_genes) & set(lib_genes))
-    if len(t_genes) >= 300 and overlap < 150:
-        missing = [g for g in t_genes if g not in set(lib_genes)][:10]
+    overlap_fraction = overlap / max(1, len(t_genes))
+    warn_cutoff = min(len(t_genes), max(5, int(0.2 * len(t_genes))))
+    overlap_warning = overlap < warn_cutoff
+    if overlap == 0:
         hint = (
-            "Insufficient gene overlap. Consider mapping symbols (validate-h5ad), "
-            "supplying --library-genes to make-target for QC, or restricting to "
-            "L1000 landmarks."
+            "No overlapping genes between target and library. "
+            "Map gene symbols/aliases or restrict to L1000 landmarks."
         )
-        msg = (
-            f"Insufficient gene overlap: {overlap} < 150. "
-            f"Example missing target genes: {missing}. {hint}"
-        )
-        raise ValueError(msg)
+        raise ValueError(hint)
+    overlap_meta = {
+        "overlap_genes": int(overlap),
+        "target_genes": int(len(t_genes)),
+        "overlap_fraction": float(overlap_fraction),
+        "overlap_warning": bool(overlap_warning),
+    }
 
     # Baseline ensemble (lower is better)
     cos_df = cosine_connectivity(target_signature, M, genes, meta)
@@ -216,7 +285,10 @@ def rank_drugs(
                 q_sorted[i] = min(q_sorted[i], q_sorted[i + 1])
             q_final = pd.Series(index=order, data=q_sorted).sort_index().to_numpy()
             ranking["q_value"] = q_final
-        return ScoreResult(method="baseline", ranking=ranking, metadata={"top_k": top_k})
+        meta_out = {"top_k": top_k, **overlap_meta}
+        if filters:
+            meta_out["filters"] = filters
+        return ScoreResult(method="baseline", ranking=ranking, metadata=meta_out)
 
     if method == "metric":
         if model_path is None:
@@ -255,15 +327,19 @@ def rank_drugs(
                 q_sorted[i] = min(q_sorted[i], q_sorted[i + 1])
             q_final = pd.Series(index=order, data=q_sorted).sort_index().to_numpy()
             ranking["q_value"] = q_final
-        return ScoreResult(
-            method="metric",
-            ranking=ranking,
-            metadata={
+        meta_out = {
+            "method": "metric",
+            "ranking": ranking,
+            "metadata": {
                 "top_k": top_k,
                 "blend": (alpha if auto_blend else blend),
                 "auto_blend": bool(auto_blend),
                 "model_path": model_path,
+                **overlap_meta,
             },
-        )
+        }
+        if filters:
+            meta_out["metadata"]["filters"] = filters
+        return ScoreResult(**meta_out)
 
     raise ValueError("Unknown method; expected 'baseline' or 'metric'")

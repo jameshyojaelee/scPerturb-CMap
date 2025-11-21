@@ -32,3 +32,17 @@ Tips:
 
 Refer to the individual Markdown files in `docs/cases/` for biological context
 and interpretation notes.
+
+## Benchmark harness
+
+Use `scperturb-cmap benchmark` (or `python scripts/benchmarks/run_benchmarks.py`) to run a lightweight
+comparison between the scPerturb-CMap baseline scorer and a random baseline on the reproducible
+dataset under `examples/data/benchmark_synthetic.csv`. Outputs include:
+
+- `results/benchmarks/benchmark_results.json` capturing recall@k and precision@k.
+- `results/benchmarks/benchmark_metrics.html` with grouped bars for each metric/method pair.
+
+Interpretation: the synthetic target is constructed so `sig_inverter` should rank first; recall@1
+for scPerturb-CMap should exceed the random baseline. Extend the harness with additional methods
+(e.g., scGen, scDE) by augmenting `scperturb_cmap/benchmarking.py` and pointing the CLI to a larger
+benchmark dataset.

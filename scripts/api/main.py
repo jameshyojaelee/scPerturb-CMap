@@ -317,12 +317,9 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Celery queue disabled; asynchronous scoring endpoints will return 503.")
 
-    # Warm the LINCS cache to catch issues early (best effort)
-    try:
-        get_lincs_library(runtime_settings)
-    except HTTPException as exc:
-        # Defer error handling to request time; log for visibility.
-        logger.warning("LINCS library warmup failed; will retry on demand. Detail: %s", exc.detail)
+    # Best-effort validation of LINCS path without loading full dataset
+    if not runtime_settings.lincs_path.exists():
+        logger.warning("LINCS library not found at %s", runtime_settings.lincs_path)
 
     try:
         yield
@@ -683,21 +680,25 @@ async def score_target(
                 detail=f"Missing target field: {exc}",
             ) from exc
 
-        library_df = get_lincs_library(runtime_settings)
+        library_source = runtime_settings.lincs_path
         model_path = get_model_path(
             runtime_settings,
             required=payload.method.lower() == "metric",
         )
+        filters = {}
+        if payload.cell_line:
+            filters["cell_line"] = [payload.cell_line]
 
         # Perform scoring
         result = rank_drugs(
             target_signature=target,
-            library=library_df,
+            library=library_source,
             method=payload.method,
             model_path=model_path,
             top_k=payload.top_k,
             blend=payload.blend,
             auto_blend=payload.auto_blend,
+            filters=filters or None,
         )
 
         # Convert to response format
