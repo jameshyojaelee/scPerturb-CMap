@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
-from typing import List, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_COLS = [
     "signature_id",
@@ -90,3 +93,44 @@ def pivot_signatures(df: pd.DataFrame) -> Tuple[np.ndarray, List[str], pd.DataFr
     S = wide.to_numpy(dtype=float)
     return S, genes, meta
 
+
+def chunk_list(items: List[str], chunk_size: int) -> Iterable[List[str]]:
+    """Yield successive chunks from a list."""
+    if chunk_size <= 0:
+        yield items
+        return
+    for idx in range(0, len(items), chunk_size):
+        yield items[idx : idx + chunk_size]
+
+
+def log_progress(message: str, progress_fn: Optional[Callable[[str], None]] = None) -> None:
+    """Log progress either via callback or module logger."""
+    if progress_fn:
+        progress_fn(message)
+    else:
+        logger.info(message)
+
+
+def append_parquet_chunk(
+    df: pd.DataFrame,
+    out_path: Path,
+    partition_by: Optional[str] = None,
+    basename_template: str = "part-{i}.parquet",
+) -> None:
+    """Append a DataFrame chunk to a Parquet dataset."""
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("pyarrow is required for streaming Parquet writes") from exc
+
+    table = pa.Table.from_pandas(df, preserve_index=False)
+    root = Path(out_path)
+    root.mkdir(parents=True, exist_ok=True)
+    partition_cols = [partition_by] if partition_by else None
+    pq.write_to_dataset(
+        table,
+        root_path=str(root),
+        partition_cols=partition_cols,
+        basename_template=basename_template,
+    )

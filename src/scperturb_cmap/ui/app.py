@@ -844,8 +844,9 @@ def sidebar_controls(
         else None
     )
     qc_summary = summarize_target_signature(target_sig, library_genes=lib_genes)
+    base_meta = target_sig.metadata if isinstance(target_sig.metadata, dict) else {}
     target_sig.metadata = {
-        **target_sig.metadata,
+        **base_meta,
         "qc_summary": qc_summary,
         "source": target_context,
     }
@@ -1204,71 +1205,74 @@ def main():
 
             st.markdown("#### Explain gene contributions")
             sig_options = table_df["signature_id"].astype(str).unique().tolist()
-            explain_sig = st.selectbox(
-                "Select a signature to explain",
-                sig_options,
-                index=0,
-                key="explain_signature_id",
-            )
-            top_genes = int(
-                st.slider(
-                    "Top genes to display",
-                    min_value=5,
-                    max_value=30,
-                    value=15,
-                    key="explain_top_genes",
+            if not sig_options:
+                st.info("No signatures available for explanation.")
+            else:
+                explain_sig = st.selectbox(
+                    "Select a signature to explain",
+                    sig_options,
+                    index=0,
+                    key="explain_signature_id",
                 )
-            )
-            if st.button("Compute SHAP-like contributions", key="explain_button"):
-                try:
-                    contrib_df = compute_contributions_from_library(
-                        target_sig, filtered_library, explain_sig
+                top_genes = int(
+                    st.slider(
+                        "Top genes to display",
+                        min_value=5,
+                        max_value=30,
+                        value=15,
+                        key="explain_top_genes",
                     )
-                except Exception as exc:
-                    st.error(f"Explanation unavailable: {exc}")
-                else:
-                    st.session_state["contrib_result"] = {
-                        "signature": explain_sig,
-                        "data": contrib_df,
-                    }
-            contrib_state = st.session_state.get("contrib_result")
-            if (
-                isinstance(contrib_state, dict)
-                and contrib_state.get("data") is not None
-                and contrib_state.get("signature") == explain_sig
-            ):
-                contrib_df = contrib_state["data"]
-                top_df = contrib_df.head(top_genes)
-                contrib_fig = px.bar(
-                    top_df.sort_values("contribution"),
-                    x="gene",
-                    y="contribution",
-                    color="direction",
-                    color_discrete_map={
-                        "beneficial": "#38bdf8",
-                        "detrimental": "#f97316",
-                    },
-                    title=f"Gene contributions for {explain_sig}",
                 )
-                contrib_fig.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(15,23,42,0.6)",
-                )
-                st.plotly_chart(contrib_fig, use_container_width=True)
-                st.dataframe(
-                    top_df[
-                        [
-                            "gene",
-                            "contribution",
-                            "abs_contribution",
-                            "target_weight",
-                            "drug_weight",
-                            "rank",
-                        ]
-                    ],
-                    hide_index=True,
-                    use_container_width=True,
-                )
+                if st.button("Compute SHAP-like contributions", key="explain_button"):
+                    try:
+                        contrib_df = compute_contributions_from_library(
+                            target_sig, filtered_library, explain_sig
+                        )
+                    except Exception as exc:
+                        st.error(f"Explanation unavailable: {exc}")
+                    else:
+                        st.session_state["contrib_result"] = {
+                            "signature": explain_sig,
+                            "data": contrib_df,
+                        }
+                contrib_state = st.session_state.get("contrib_result")
+                if (
+                    isinstance(contrib_state, dict)
+                    and contrib_state.get("data") is not None
+                    and contrib_state.get("signature") == explain_sig
+                ):
+                    contrib_df = contrib_state["data"]
+                    top_df = contrib_df.head(top_genes)
+                    contrib_fig = px.bar(
+                        top_df.sort_values("contribution"),
+                        x="gene",
+                        y="contribution",
+                        color="direction",
+                        color_discrete_map={
+                            "beneficial": "#38bdf8",
+                            "detrimental": "#f97316",
+                        },
+                        title=f"Gene contributions for {explain_sig}",
+                    )
+                    contrib_fig.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(15,23,42,0.6)",
+                    )
+                    st.plotly_chart(contrib_fig, use_container_width=True)
+                    st.dataframe(
+                        top_df[
+                            [
+                                "gene",
+                                "contribution",
+                                "abs_contribution",
+                                "target_weight",
+                                "drug_weight",
+                                "rank",
+                            ]
+                        ],
+                        hide_index=True,
+                        use_container_width=True,
+                    )
 
             export_metadata = build_export_metadata(
                 target_sig,

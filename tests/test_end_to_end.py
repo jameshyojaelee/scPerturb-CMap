@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,11 @@ import pandas as pd
 from scperturb_cmap.api.score import rank_drugs
 from scperturb_cmap.data.lincs_loader import load_lincs_long
 from scperturb_cmap.io.schemas import TargetSignature
+from scperturb_cmap.ui.helpers import (
+    compute_contributions_from_library,
+    load_target_signature_from_json_bytes,
+    persist_exports,
+)
 
 
 def _ensure_demo_long() -> pd.DataFrame:
@@ -51,3 +57,32 @@ def test_end_to_end_baseline_scoring():
     assert required.issubset(set(ranking_df.columns))
     assert len(ranking_df) > 0
 
+
+def test_load_target_signature_from_json_bytes():
+    payload = {"genes": ["G1", "G2"], "weights": [1.0, -1.0]}
+    ts = load_target_signature_from_json_bytes(json.dumps(payload).encode())
+    assert ts.genes == ["G1", "G2"]
+    assert ts.weights[0] == 1.0
+
+
+def test_compute_contributions_from_library():
+    ts = TargetSignature(genes=["A", "B"], weights=[1.0, -1.0])
+    library_df = pd.DataFrame(
+        [
+            {"signature_id": "sigA", "gene_symbol": "A", "score": -0.5},
+            {"signature_id": "sigA", "gene_symbol": "B", "score": 0.25},
+        ]
+    )
+    contrib = compute_contributions_from_library(ts, library_df, "sigA")
+    assert not contrib.empty
+    assert "signature_id" in contrib.columns
+    assert contrib["signature_id"].iloc[0] == "sigA"
+
+
+def test_persist_exports(tmp_path: Path):
+    csv_bytes = b"a,b\n1,2\n"
+    json_bytes = b'{"x":1}'
+    paths = persist_exports(tmp_path, "ui_test", csv_bytes, json_bytes, b"{}")
+    assert paths["csv"].exists()
+    assert paths["json"].exists()
+    assert paths["session"].exists()

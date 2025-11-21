@@ -47,11 +47,16 @@ model improves recall.
 Launch the UI with `make ui` (or `scperturb-cmap ui`) and open
 `http://localhost:8501/`.
 
-- **Exports** – after scoring, use the *Download → CSV* or *Download → Parquet*
-  buttons in the results tab. Files are written to
-  `workspace/ui_exports/` with timestamped folders.
+- **Targets from JSON** – load `TargetSignature` exports (from the CLI/UI) via the sidebar
+  *Target JSON* option in addition to gene lists or uploaded `.h5ad` files.
+- **QC dashboards** – the target panel now surfaces `summarize_target_signature` output,
+  highlighting overlap with the loaded LINCS library and weight distributions.
+- **SHAP-like explanations** – pick any ranked signature and use the *Explain gene contributions*
+  controls to visualise contributions computed via `feature_importance`.
+- **Exports** – download CSV/JSON with enriched metadata or click *Save to examples/out* to persist
+  results + session JSON for later bookmarking.
 - **Bookmarking** – configure the target, filters, and blend settings, then copy
-  the URL displayed in the *Bookmark* panel. Visiting the saved link restores
+  the bookmark token in the *Session & sharing* panel. Visiting the saved link restores
   the UI state so collaborators see the same configuration.
 - **Preset management** – saved presets live in
   `examples/data/ui_presets.json`. Edit the file or import/export presets from

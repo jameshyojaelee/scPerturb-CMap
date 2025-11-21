@@ -618,6 +618,7 @@ def prepare_lincs(
             out_path=str(out),
             chunk_cols=int(chunk_cols) if chunk_cols and chunk_cols > 0 else 0,
             partition_by=partition_by,
+            progress_callback=lambda msg: typer.echo(f"[ingest] {msg}"),
         )
         # If chunked write was used, df will be empty; emit a summary by reading the output head
         if df.empty and out.exists():

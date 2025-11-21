@@ -28,6 +28,19 @@
 - Any filters applied to cell lines or doses
 - Known limitations or TODOs
 
+## Best practices for custom LINCS-like libraries
+- Use `scperturb-cmap prepare-lincs --gctx <file>` for large Level 5 archives; add `--chunk-cols 256`
+  and `--partition-by cell_line` to stream column chunks to a Parquet dataset without exhausting RAM.
+- Supply `--repurposing` and `--gene-info` paths so MOA/target annotations and landmark filters are
+  applied during conversion. The converter logs retained signatures/genes and landmark overlaps.
+- Run `scripts/validators/validate_parquet_dataset.py --full --metrics-json workspace/lincs_metrics.json`
+  after each ingest to capture row counts, partition balance, unique signature/gene/compound counts,
+  and schema drift (missing/extra columns, null fractions). Keep these metric snapshots under version
+  control for quick regression checks.
+- When building custom LINCS-like libraries (e.g., in-house perturbations), mirror the long-format
+  schema (`signature_id`, `compound`, `cell_line`, `gene_symbol`, `score`, `moa`, `target`) so the
+  CLI, API, and UI can ingest them without custom adapters.
+
 ## Licensing & Redistribution
 - LINCS L1000 data are distributed by the Broad Institute Connectivity Map (CLUE) team under a
   Creative Commons CC BY 4.0 license. Cite Subramanian *et&nbsp;al.* (Cell, 2017) and the CLUE
