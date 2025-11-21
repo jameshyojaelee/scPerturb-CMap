@@ -18,6 +18,12 @@ scPerturb-CMap 0.2.0 lands with env-driven API configuration (cache TTLs, reques
 ### Fixed
 - Acceptance harness now respects the active Python interpreter instead of assuming `.venv` paths.
 
+### CI/CD and Releases
+- GitHub Actions pipeline (`ci.yml`) now runs `make lint`, `make test`, and `make acceptance` across Python 3.10–3.12, reusing a cached `.venv` with the optional Redis/PyArrow extras enabled so API checks remain non-blocking.
+- Documentation is validated via `mkdocs build --strict`, with the rendered site and built distributions uploaded as workflow artifacts.
+- Tagged releases (`v*`) reuse the same build job to produce wheels/sdists from `pyproject.toml` metadata and publish to PyPI using `pypa/gh-action-pypi-publish`; non-tag pushes and PRs skip publishing but still surface artifacts for review.
+- The project README now advertises the CI status badge so contributors can quickly verify pipeline health.
+
 ## [0.1.1] - 2025-09-24
 ### Added
 - Initial public release of scPerturb-CMap.
