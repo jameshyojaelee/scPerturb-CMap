@@ -1,6 +1,4 @@
 # scPerturb-CMap
-
-[![CI](https://github.com/jameslee/scPerturb-CMap/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jameslee/scPerturb-CMap/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-gh--pages-blue.svg)](https://jameslee.github.io/scPerturb-CMap/)
 [![PyPI version](https://img.shields.io/pypi/v/scperturb-cmap.svg)](https://pypi.org/project/scperturb-cmap/)
 
@@ -274,10 +272,3 @@ Each case study includes:
 - Suggested experimental validations
 - Literature citations
 - MOA enrichment analysis
-
-## Contributing
-
-- Quick start: `docs/contributing/ONBOARDING.md`
-- Guidelines: `docs/contributing/CONTRIBUTING.md`
-- Conduct: `CODE_OF_CONDUCT.md`
-- Templates: `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md`
