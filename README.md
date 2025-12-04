@@ -14,13 +14,6 @@ scPerturb-CMap allows users to use L1000 CMap data to rank compounds that are mo
 | Required inputs | A single-cell experiment that already contains the perturbation of interest (treated vs control). | A target signature from scRNA-seq (`.h5ad`) or curated up/down gene lists; optional custom LINCS-style libraries. |
 | Outputs | Simulated single-cell expression profiles under hypothetical perturbations. | Ranked list of real compounds with connectivity scores, z/p statistics, QC metrics, and MOA enrichment. |
 
-The package ships with:
-
-- a fast baseline (cosine + GSEA ensemble) that emits z-scores and p-values,
-- a DualEncoder metric model that can be trained on real inversion pairs,
-- CLI utilities for LINCS ingestion, target construction, scoring, and training,
-- a Streamlit UI for interactive analysis.
-
 
 ## Concept Overview
 
@@ -38,10 +31,9 @@ Traditional connectivity mapping averages bulk transcriptomes and may miss rare 
 pip install scperturb-cmap
 ```
 
-The project is published on [PyPI](https://pypi.org/project/scperturb-cmap/) with wheels for quick installation across common environments; check the release history there for the latest version notes.
+The project is published on [PyPI](https://pypi.org/project/scperturb-cmap/)
 
 To hack on the project locally:
-
 ```bash
 git clone https://github.com/jameslee/scPerturb-CMap.git
 cd scPerturb-CMap
@@ -60,10 +52,7 @@ still relies on the official LINCS distribution hosted by the [Broad Institute C
 (CLUE) team](https://clue.io/connectopedia/data_download). The data are released under a Creative
 Commons CC BY 4.0 license; downstream analysis must (a) attribute the Broad Institute, the NIH
 LINCS program, and the original publications (e.g. Subramanian *et&nbsp;al.*, Cell 2017) and
-(b) preserve the original license statement when you redistribute derived subsets. scPerturb-CMap
-does not grant additional rights to the LINCS measurements—ensure collaborators download
-authenticated archives directly from CLUE when possible and avoid re-hosting raw Level 5 files in
-public buckets.
+(b) preserve the original license statement when you redistribute derived subsets.
 
 ---
 
@@ -133,8 +122,6 @@ make test
 
 *Figure 4. Blended connectivity scores for the top-ranked compounds in the NSCLC case study, with annotations for the leading hits.*
 
-See **[docs/reference/repository_structure.md](docs/reference/repository_structure.md)** for a directory overview and navigation tips.
-
 | Command | Purpose |
 | --- | --- |
 | `scperturb-cmap make-target` | Build a target signature from `.h5ad` clusters or explicit gene lists. Options include `--pseudobulk-key`, `--qc-report`, and `--library-genes` to capture QC context. |
@@ -142,8 +129,6 @@ See **[docs/reference/repository_structure.md](docs/reference/repository_structu
 | `scperturb-cmap score` | Score a target against a LINCS library using `baseline` or `metric` methods. Supports rich filtering (`--cell-line(s)`, `--moa(s)`, `--dose-range`, `--touchstone`), replicate collapsing, and Parquet output. |
 | `scperturb-cmap train` | Train the DualEncoder. With `pairs_path`, `targets_path`, and `library_path` the trainer uses real inversion data; otherwise, it falls back to synthetic toy data. |
 | `scperturb-cmap device` / `scperturb-cmap diagnose` | Quick checks for device availability and environment diagnostics. |
-
-Python APIs mirror the CLI; see `src/scperturb_cmap` for modules such as `api.score`, `data.pairs`, and `models.train`.
 
 
 1. **Assemble positives**: create a table with at least `target_id` and `signature_id`. Use `prepare_pair_table(...)` to attach negatives or supply a `label` column (1 = inversion, 0 = non-inversion).
@@ -251,7 +236,7 @@ scPerturb-CMap includes a comprehensive explainability framework providing SHAP-
 - **Comparison mode**: Explains why Drug A ranks higher than Drug B
 
 
-Three comprehensive real-world case studies with full workflow examples:
+## 3 comprehensive real-world case studies:
 
 ### 1. NSCLC CD8+ T Cell Exhaustion
 Reversing immune exhaustion with top-20 validated compounds and literature citations.  
