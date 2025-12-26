@@ -109,8 +109,8 @@ class TestGeneContributions:
         a_conc = contrib_concordant.loc[contrib_concordant["gene"] == "A", "contribution"].iloc[0]
 
         assert a_inv * a_conc < 0  # Sign flips
-        # Concordant version should lower the overall score
-        assert contrib_concordant["contribution"].sum() < contrib_inverted["contribution"].sum()
+        # Inverted version should lower the overall score (lower = better inversion)
+        assert contrib_inverted["contribution"].sum() < contrib_concordant["contribution"].sum()
 
     def test_metric_blend_respects_baseline_component(self, monkeypatch):
         """Metric explainability blends baseline + metric contributions."""

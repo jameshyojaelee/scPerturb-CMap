@@ -27,11 +27,15 @@ def cosine_connectivity(
     lincs_genes: List[str],
     meta: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Cosine-based connectivity where lower scores indicate stronger concordance.
+    """Cosine-based connectivity where lower scores indicate stronger inversion.
 
     - Aligns genes between target and LINCS genes using harmonized symbols
     - Standardizes vectors (row-wise for LINCS, 1D for target)
-    - Computes cosine similarity and returns score = -cosine
+    - Computes cosine similarity and returns score = cosine
+
+    With standardized signatures, cosine behaves like correlation: negative values
+    indicate anti-correlation (inversion), so sorting ascending ranks the strongest
+    inversions first.
     """
     M = np.asarray(lincs_matrix, dtype=float)
     if M.shape[0] != len(meta):
@@ -72,7 +76,7 @@ def cosine_connectivity(
         t_norm = np.linalg.norm(tz) + eps
         r_norms = np.linalg.norm(Mz, axis=1) + eps
         cos = (Mz @ tz) / (r_norms * t_norm)
-        scores = -cos
+        scores = cos
 
     out = meta.copy().reset_index(drop=True)
     out["score"] = scores
@@ -167,8 +171,8 @@ def _zscore(x: np.ndarray) -> np.ndarray:
 def ensemble_connectivity(cos_df: pd.DataFrame, gsea_df: pd.DataFrame) -> pd.DataFrame:
     """Average of z-scored methods (lower is better).
 
-    Cosine scores are already lower-is-better. GSEA scores are flipped
-    to match this convention before z-scoring.
+    Both cosine and GSEA return lower-is-better inversion scores, so we z-score
+    each method and average them.
     """
     keys = ["signature_id", "compound", "cell_line"]
     left = cos_df[keys + ["score"]].rename(columns={"score": "cos_score"})
@@ -177,7 +181,6 @@ def ensemble_connectivity(cos_df: pd.DataFrame, gsea_df: pd.DataFrame) -> pd.Dat
     if df.empty:
         return pd.DataFrame(columns=keys + ["score"])
     z_cos = _zscore(df["cos_score"].to_numpy())
-    z_gsea = _zscore((-df["gsea_score"]).to_numpy())  # flip to lower-is-better
+    z_gsea = _zscore(df["gsea_score"].to_numpy())
     df["score"] = 0.5 * (z_cos + z_gsea)
     return df[keys + ["score"]]
-

@@ -36,9 +36,9 @@ def test_cosine_connectivity_ordering():
     )
 
     df = cosine_connectivity(target, M, lincs_genes, meta)
-    # Lower score (more negative) indicates stronger match
+    # Lower score (more negative) indicates stronger inversion / anti-correlation
     scores = dict(zip(df["signature_id"], df["score"]))
-    assert scores["pos"] < scores["neu"] < scores["neg"]
+    assert scores["neg"] < scores["neu"] < scores["pos"]
 
 
 def test_gsea_connectivity_ordering():
@@ -105,5 +105,5 @@ def test_ensemble_connectivity_combines_methods():
 
     ens = ensemble_connectivity(cos_df, gsea_df)
     e = dict(zip(ens["signature_id"], ens["score"]))
-    # Lower is better after flipping GSEA inside ensemble
-    assert e["pos"] < e["neu"] < e["neg"]
+    # Lower is better (more negative implies stronger inversion)
+    assert e["neg"] < e["neu"] < e["pos"]

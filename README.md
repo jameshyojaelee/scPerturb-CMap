@@ -3,7 +3,14 @@
 
 The Broad Connectivity Map (LINCS L1000) captures millions of empirically measured drug responses. scPerturb-CMap is the bridge that lets single-cell researchers mine that atlas without rebuilding perturbation screens from scratch. Starting with a troublesome or rare cell population (e.g., EMT-like tumor cells, IFN-high macrophages, exhausted T cells), you derive a gene signature and immediately query the L1000 treasury for compounds proven to push cells in the opposite direction. 
 
-scPerturb-CMap allows users to use L1000 CMap data to rank compounds that are most likely to reverse pathological cell states within their own single-cell RNA-seq datasets, enabling rapid, data-driven drug repurposing prediction for bench validation
+scPerturb-CMap allows users to use L1000 CMap data to rank compounds that are most likely to reverse pathological cell states within their own single-cell RNA-seq datasets, enabling rapid, data-driven drug repurposing prediction for bench validation.
+
+**What “prediction” means here**: scPerturb-CMap does **not** simulate treated single-cell expression profiles. Instead, it performs *connectivity mapping / retrieval*: given a target signature (usually derived from scRNA-seq, but it can also be a curated up/down gene list), it ranks **real LINCS perturbation signatures** by how strongly they invert that target.
+
+- **Baseline (default, no ML)**: cosine connectivity + a GSEA-style enrichment score, combined as a z-scored ensemble (lower score = stronger inversion).
+- **DualEncoder metric model (optional, deep learning)**: a two-tower MLP trained on **signature-level inversion pairs**. The model consumes vectorized targets (weighted genes), not raw cells; LINCS signatures are negated during training/inference so that “inversion” maps to “similarity” in embedding space. At scoring time we blend the metric similarity with the baseline (see Fig 2).
+
+Why a DualEncoder? We want a **retrieval model** (rank compounds in a fixed atlas), not a single-cell generator. A dual-tower encoder is lightweight, learns a task-specific similarity metric from inversion pairs, and stays compatible with a strong deterministic baseline when you prefer robustness or lack training labels.
 
 #### How scPerturb-CMap differs from scGen / scPerturb
 

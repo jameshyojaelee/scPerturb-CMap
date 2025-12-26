@@ -43,12 +43,16 @@ def _extract_signature(
 
 
 def _cosine_component(target_vec: np.ndarray, drug_vec: np.ndarray) -> Tuple[np.ndarray, float]:
-    """Cosine connectivity contributions (score = -cosine)."""
+    """Cosine connectivity contributions (score = cosine).
+
+    Under the library scoring convention, lower is better (more negative implies
+    stronger inversion / anti-correlation).
+    """
     t_std = standardize_vector(target_vec)
     d_std = standardize_vector(drug_vec)
     eps = max(np.finfo(float).eps, 1e-12)
     denom = (np.linalg.norm(t_std) + eps) * (np.linalg.norm(d_std) + eps)
-    contrib = -(t_std * d_std) / denom
+    contrib = (t_std * d_std) / denom
     return contrib, float(contrib.sum())
 
 
